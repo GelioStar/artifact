@@ -33,6 +33,12 @@ const languageSel = $('language');
 const durationSel = $('duration');
 const punctChk = $('punct');
 
+// --- results ---
+const words_per_minute = $('words-per-minute-value');
+const correct_chars = $('correct-chars-value');
+const accuracy = $('accuracy-value');
+const error_chars = $('error-chars-value');
+
 // --- helper utilities ---
 function normalizeSpaceChar(ch) {
   // treat NBSP and normal space as equivalent for comparison/display
@@ -165,6 +171,12 @@ function showResults(stat) {
     <div>Correct chars: ${stat.correctChars || stat.totalChars}</div>
     <div>Errors: ${stat.errors}</div>
   `;
+
+  words_per_minute.textContent = stat.wpm.toFixed(1);
+  accuracy.textContent = (stat.accuracy * 100).toFixed(1);
+  correct_chars.textContent = stat.correctChars || stat.totalChars;
+  error_chars.textContent - stat.error;
+    
 
   const seconds = Math.max(1, Math.ceil(elapsedMs / 1000));
   const wpmSeries = new Array(seconds).fill(0);
