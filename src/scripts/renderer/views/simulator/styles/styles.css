@@ -81,7 +81,7 @@ button:hover {
   color:var(--muted)
 }
 
-#trainer{
+/* #trainer{
   
   background: #071427;
   padding:12px;
@@ -89,7 +89,7 @@ button:hover {
   min-height:160px;
   outline:none;
   box-shadow: 0 6px 18px rgba(2,6,23,0.7);
-}
+} */
 .text-display{
   font-family: "Montserrat Regular", Courier, monospace;
   font-size:20px;

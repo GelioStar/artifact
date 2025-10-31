@@ -168,14 +168,14 @@ function showResults(stat) {
   summaryDiv.innerHTML = `
     <div>WPM: ${stat.wpm.toFixed(1)}</div>
     <div>Accuracy: ${(stat.accuracy * 100).toFixed(1)}%</div>
-    <div>Correct chars: ${stat.correctChars || stat.totalChars}</div>
+    <div>Correct chars: ${stat.correctChars || 0}</div>
     <div>Errors: ${stat.errors}</div>
   `;
 
   words_per_minute.textContent = stat.wpm.toFixed(1);
-  accuracy.textContent = (stat.accuracy * 100).toFixed(1);
-  correct_chars.textContent = stat.correctChars || stat.totalChars;
-  error_chars.textContent - stat.error;
+  accuracy.textContent = `${(stat.accuracy * 100).toFixed(1)}%`;
+  correct_chars.textContent = stat.correctChars || 0;
+  error_chars.textContent = stat.errors;
     
 
   const seconds = Math.max(1, Math.ceil(elapsedMs / 1000));
