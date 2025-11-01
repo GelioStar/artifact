@@ -1,10 +1,12 @@
-/* renderer.js — merged: renderer1 functionality + renderer2-style rendering and no <textarea> input */
-/* Использует electronAPI из renderer1 (createSession/generatePassage/savePassage/recordKeystroke/finalizeResults)
-   и визуальную модель renderer2 (span на каждый символ + caret). */
+/* renderer.js — live stats версия */
+/* Заменяет/дополняет ваш текущий файл: живой вывод результатов во время тренинга. */
 
 const $ = (id) => document.getElementById(id);
 
-// Session / timing / stats (from renderer1)
+// --- Возможная несовместимость preload: берем любую экспозицию API ---
+const api = window.electronAPI;
+
+// Session / timing / stats
 let sessionToken = null;
 let passageText = '';
 let duration = 60;
@@ -15,17 +17,17 @@ let timerInterval = null;
 let elapsedMs = 0;
 let keystrokes = []; // array of {t_ms, key, position, correct}
 
-// Rendering state (renderer2-style)
-let cursor = 0; // index in passageText
+// Rendering state
+let cursor = 0;
 const statuses = []; // 'pending' | 'correct' | 'incorrect'
 
-// DOM elements (we prefer textDisplay/trainer like renderer2)
+// DOM
 const startBtn = $('startBtn');
 const restartBtn = $('restart');
 const timerEl = $('timer');
-const passageEl = $('passage'); // kept for compatibility if needed, but visual rendering uses textDisplay
-const textDisplay = $('textDisplay'); // renderer2 visual container
-const trainer = $('trainer'); // element that receives focus for keyboard input
+const passageEl = $('passage');
+const textDisplay = $('textDisplay');
+const trainer = $('trainer');
 const resultsPanel = $('resultsPanel');
 const chartDiv = $('chart');
 const summaryDiv = $('summary');
@@ -33,81 +35,101 @@ const languageSel = $('language');
 const durationSel = $('duration');
 const punctChk = $('punct');
 
-// --- results ---
+// result fields
 const words_per_minute = $('words-per-minute-value');
 const correct_chars = $('correct-chars-value');
 const accuracy = $('accuracy-value');
 const error_chars = $('error-chars-value');
 
-// --- helper utilities ---
-function normalizeSpaceChar(ch) {
-  // treat NBSP and normal space as equivalent for comparison/display
-  if (ch === '\u00A0') return ' ';
-  return ch;
-}
+// Option: писать каждый keystroke сразу в БД (через IPC)
+// Если true — stopSession пропустит bulk-insert, чтобы не дублировать.
+const RECORD_EACH_KEY = true;
+
+// helpers
+function normalizeSpaceChar(ch) { if (ch === '\u00A0') return ' '; return ch; }
 function nowMs() { return performance.now(); }
 
-// --- rendering (renderer2 style) ---
 function initStatuses() {
   statuses.length = 0;
   for (let i = 0; i < passageText.length; i++) statuses.push('pending');
 }
 
 function render() {
-  // Build spans for each character in textDisplay (renderer2 behaviour)
   textDisplay.innerHTML = '';
   for (let i = 0; i < passageText.length; i++) {
     const ch = passageText[i];
     const span = document.createElement('span');
     span.classList.add('char');
-    span.classList.add(statuses[i] || 'pending'); // safety
+    span.classList.add(statuses[i] || 'pending');
     if (i === cursor) span.classList.add('caret');
-    // Show spaces visibly: use NBSP so they occupy width
     span.textContent = ch === ' ' ? '\u00A0' : ch;
     span.dataset.index = i;
     textDisplay.appendChild(span);
   }
-  // Ensure caret visible — smoothly scroll if needed
   const caretSpan = textDisplay.querySelector('.char.caret');
   if (caretSpan) caretSpan.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+  if (passageEl) passageEl.textContent = passageText;
+}
 
-  // Optional: keep old passage element (if present) in sync for accessibility / ARIA
-  if (passageEl) {
-    // mirror plain text for aria-live readers (but do not alter per-char statuses here)
-    passageEl.textContent = passageText;
+// --- NEW: live stats computation ---
+function computeStats() {
+  const totalChars = passageText.length;
+  const correctChars = keystrokes.filter(k => k.correct).length;
+  const errors = keystrokes.filter(k => !k.correct).length;
+  // если время почти 0, используем min 1s to avoid infinite wpm
+  const minutes = Math.max((elapsedMs / 1000) / 60, 1 / 60);
+  const wpm = ((correctChars / 5) / minutes) || 0;
+  const accuracyVal = (correctChars + errors) > 0 ? (correctChars / (correctChars + errors)) : 1;
+  return {
+    wpm,
+    correctChars,
+    errors,
+    accuracy: accuracyVal,
+    totalChars
+  };
+}
+
+function showLiveStats(stat) {
+  // панель результатов — обновляем live
+  if (words_per_minute) words_per_minute.textContent = stat.wpm.toFixed(1);
+  if (accuracy) accuracy.textContent = `${(stat.accuracy * 100).toFixed(1)}%`;
+  if (correct_chars) correct_chars.textContent = stat.correctChars || 0;
+  if (error_chars) error_chars.textContent = stat.errors;
+  // краткое текстовое резюме (если нужно)
+  if (summaryDiv) {
+    summaryDiv.innerHTML = `
+      <div>WPM: ${stat.wpm.toFixed(1)}</div>
+      <div>Accuracy: ${(stat.accuracy * 100).toFixed(1)}%</div>
+      <div>Correct chars: ${stat.correctChars || 0}</div>
+      <div>Errors: ${stat.errors}</div>
+    `;
   }
 }
 
-// --- session lifecycle (from renderer1, adapted to new rendering) ---
+// --- session lifecycle ---
 async function startSession() {
   try {
-    // read options
     language = languageSel.value;
     duration = parseInt(durationSel.value, 10) || 60;
     punctuation = punctChk.checked ? 1 : 0;
 
-    // create session via main (electronAPI)
-    const res = await window.electronAPI.createSession({ language, duration, punctuation, t9_enabled: 0 });
-    if (!res.ok) { alert('Failed to create session'); return; }
+    const res = await (api && api.createSession ? api.createSession({ language, duration, punctuation, t9_enabled: 0 }) : Promise.resolve({ ok: false }));
+    if (!res || !res.ok) { alert('Failed to create session'); return; }
     sessionToken = res.token;
 
-    // generate passage
-    const gen = await window.electronAPI.generatePassage({
+    const gen = await (api && api.generatePassage ? api.generatePassage({
       language,
       length_words: Math.round(duration / 2),
       generator: 'random',
       style: punctuation ? 'punct' : 'plain'
-    });
-    passageText = String(gen.text || '');
-    await window.electronAPI.savePassage({
-      session_token: sessionToken,
-      text: passageText,
-      language,
-      punctuation,
-      source: gen.source
-    });
+    }) : Promise.resolve({ ok: false, text: '' }));
 
-    // reset UI/state
+    passageText = String(gen.text || '');
+    if (api && api.savePassage) {
+      api.savePassage({ session_token: sessionToken, text: passageText, language, punctuation, source: gen.source }).catch(console.error);
+    }
+
+    // reset state
     keystrokes = [];
     cursor = 0;
     initStatuses();
@@ -116,15 +138,14 @@ async function startSession() {
 
     render();
     timerEl.textContent = String(duration);
-    // focus trainer instead of textarea
     if (trainer) trainer.focus();
 
     // start timer (onTick updates elapsedMs and stops session when time's up)
-    timerInterval = setInterval(onTick, 100);
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(onTick, 100); // ticks every 100ms
     startBtn.disabled = true;
     resultsPanel.hidden = true;
 
-    // optional: set a visual hint in trainer (no textarea placeholder)
     if (trainer) trainer.setAttribute('data-hint', passageText.slice(0, 120));
   } catch (err) {
     console.error('startSession error', err);
@@ -132,52 +153,52 @@ async function startSession() {
 }
 
 function stopSession() {
-  if (timerInterval) clearInterval(timerInterval);
-  timerInterval = null;
+  if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
 
-  const totalChars = passageText.length;
-  const correctChars = keystrokes.filter(k => k.correct).length;
-  const errors = keystrokes.filter(k => !k.correct).length;
-  const minutes = (elapsedMs / 1000) / 60 || 1 / 60;
-  const wpm = ((correctChars / 5) / minutes) || 0;
-  const avg_wpm = wpm;
-  const accuracy = correctChars / Math.max(1, correctChars + errors);
+  const stat = computeStats();
+  const { wpm, errors, accuracy: acc, totalChars, correctChars } = stat;
 
-  // save keystrokes to DB (same as renderer1)
-  (async () => {
-    for (const k of keystrokes) {
-      await window.electronAPI.recordKeystroke({
-        session_token: sessionToken,
-        t_ms: Math.round(k.t_ms),
-        key: k.key,
-        position: k.position,
-        correct: k.correct ? 1 : 0
-      });
+  // Если мы не записывали клавиши по мере набора, запишем их здесь.
+  if (!RECORD_EACH_KEY) {
+    (async () => {
+      try {
+        if (api && api.recordKeystroke) {
+          for (const k of keystrokes) {
+            await api.recordKeystroke({
+              session_token: sessionToken,
+              t_ms: Math.round(k.t_ms),
+              key: k.key,
+              position: k.position,
+              correct: k.correct ? 1 : 0
+            });
+          }
+        }
+        if (api && api.finalizeResults) {
+          await api.finalizeResults({ session_token: sessionToken, wpm, avg_wpm: wpm, errors, accuracy: acc, totalChars, total_chars: totalChars });
+        }
+      } catch (err) {
+        console.error('stopSession save error', err);
+      }
+    })();
+  } else {
+    // если писали каждое нажатие, просто finalize
+    if (api && api.finalizeResults) {
+      api.finalizeResults({ session_token: sessionToken, wpm, avg_wpm: wpm, errors, accuracy: acc, totalChars }).catch(console.error);
     }
-    await window.electronAPI.finalizeResults({ session_token: sessionToken, wpm, avg_wpm, errors, accuracy });
-  })();
+  }
 
-  showResults({ wpm, avg_wpm, errors, accuracy, totalChars, correctChars });
-
+  showResults({ wpm, avg_wpm: wpm, errors, accuracy: acc, totalChars, correctChars });
   startBtn.disabled = false;
 }
 
-// --- results/graphing (kept from renderer1) ---
+// --- results/graphing (keeps previous showResults but live) ---
 function showResults(stat) {
   resultsPanel.hidden = false;
-  summaryDiv.innerHTML = `
-    <div>WPM: ${stat.wpm.toFixed(1)}</div>
-    <div>Accuracy: ${(stat.accuracy * 100).toFixed(1)}%</div>
-    <div>Correct chars: ${stat.correctChars || 0}</div>
-    <div>Errors: ${stat.errors}</div>
-  `;
 
-  words_per_minute.textContent = stat.wpm.toFixed(1);
-  accuracy.textContent = `${(stat.accuracy * 100).toFixed(1)}%`;
-  correct_chars.textContent = stat.correctChars || 0;
-  error_chars.textContent = stat.errors;
-    
+  // already show final numbers (reuse live updater)
+  showLiveStats(stat);
 
+  // build per-second arrays for charting (optional)
   const seconds = Math.max(1, Math.ceil(elapsedMs / 1000));
   const wpmSeries = new Array(seconds).fill(0);
   const errSeries = new Array(seconds).fill(0);
@@ -197,55 +218,58 @@ function showResults(stat) {
     return +wpm.toFixed(2);
   });
 
-  const data = [];
-  for (let i = 0; i < seconds; i++) data.push({ time: i, wpm: wpmPerSec[i], errors: errSeries[i] });
+  // If you want a live chart: rebuild the anychart plot here.
+  // For simplicity and reliability we redraw chart once at the end.
+  if (typeof anychart !== 'undefined' && chartDiv) {
+    const data = [];
+    for (let i = 0; i < seconds; i++) data.push({ time: i, wpm: wpmPerSec[i], errors: errSeries[i] });
 
-  anychart.onDocumentReady(function () {
-    var chart = anychart.cartesian();
-    var wpmSeriesPlot = chart.line(data.map(d => [d.time, d.wpm]));
-    wpmSeriesPlot.name('WPM').markers(true);
-    wpmSeriesPlot.tooltip().format('{%value}');
-    var errorsSeries = chart.column(data.map(d => [d.time, d.errors]));
-    errorsSeries.name('Errors/sec');
-    errorsSeries.yScale().ticks().interval(1);
-    chart.yScale().minimum(0);
-    chart.yAxis(0).title('WPM');
-    chart.yAxis(1).orientation('right').title('Errors/sec');
-    errorsSeries.yScale(chart.yScale());
-    chart.xAxis().title('Seconds');
-    chart.legend(true);
-    chart.container('chart');
-    chart.draw();
-  });
+    anychart.onDocumentReady(function () {
+      var chart = anychart.cartesian();
+      var wpmSeriesPlot = chart.line(data.map(d => [d.time, d.wpm]));
+      wpmSeriesPlot.name('WPM').markers(true);
+      wpmSeriesPlot.tooltip().format('{%value}');
+      var errorsSeries = chart.column(data.map(d => [d.time, d.errors]));
+      errorsSeries.name('Errors/sec');
+      errorsSeries.yScale().ticks().interval(1);
+      chart.yScale().minimum(0);
+      chart.yAxis(0).title('WPM');
+      chart.yAxis(1).orientation('right').title('Errors/sec');
+      errorsSeries.yScale(chart.yScale());
+      chart.xAxis().title('Seconds');
+      chart.legend(true);
+      chart.container('chart');
+      chart.draw();
+    });
+  }
 }
 
-// --- timer tick ---
+// --- timer tick (updates elapsedMs and live stats) ---
 function onTick() {
   if (!t0) return;
   elapsedMs = nowMs() - t0;
   const remaining = Math.max(0, Math.round(duration - elapsedMs / 1000));
   timerEl.textContent = String(remaining);
+
+  // update live numbers every tick (lightweight)
+  const stat = computeStats();
+  showLiveStats(stat);
+
+  // stop when finished
   if (remaining <= 0) stopSession();
 }
 
 // --- keyboard handling (no textarea) ---
-// We capture keydown while session is active. We call e.preventDefault() only when session active
-// to avoid interfering with general page keys otherwise.
 window.addEventListener('keydown', (e) => {
-  // Only process keys during an active session (timerInterval != null)
   if (!timerInterval) {
-    // small UX: if Enter pressed and session not active, focus trainer so user can start
     if (e.key === 'Enter' && trainer) trainer.focus();
     return;
   }
 
-  // Now session is active: intercept keys
   e.preventDefault();
   const key = e.key;
-
-  if (key === 'Tab') return; // ignore Tab (we already prevented default)
+  if (key === 'Tab') return;
   if (key === 'Backspace') {
-    // move cursor back and mark pending (do not record backspace as keystroke)
     if (cursor > 0) {
       cursor--;
       statuses[cursor] = 'pending';
@@ -254,54 +278,64 @@ window.addEventListener('keydown', (e) => {
     return;
   }
 
-  // printable characters: single-character strings
   if (key.length === 1) {
-    if (cursor >= passageText.length) {
-      // ignore input past end
-      return;
-    }
+    if (cursor >= passageText.length) return;
+
     const expected = passageText[cursor];
     const typed = key;
-    // normalize spaces for comparison
     const ok = normalizeSpaceChar(typed) === normalizeSpaceChar(expected);
-    statuses[cursor] = ok ? 'correct' : 'incorrect';
 
-    // record keystroke (time from start, the character we *saw* from the keyboard, position, correctness)
-    keystrokes.push({ t_ms: nowMs() - t0, key: typed, position: cursor, correct: ok });
+    // remember position before increment
+    const pos = cursor;
+
+    statuses[pos] = ok ? 'correct' : 'incorrect';
+
+    const kobj = { t_ms: nowMs() - t0, key: typed, position: pos, correct: ok };
+    keystrokes.push(kobj);
+
+    // --- NEW: send individual keystroke immediately (optional) ---
+    if (RECORD_EACH_KEY && api && api.recordKeystroke) {
+      try {
+        api.recordKeystroke({
+          session_token: sessionToken,
+          t_ms: Math.round(kobj.t_ms),
+          key: kobj.key,
+          position: kobj.position,
+          correct: kobj.correct ? 1 : 0
+        }).catch(console.error);
+      } catch (err) {
+        console.error('recordKeystroke (immediate) failed', err);
+      }
+    }
 
     cursor++;
     render();
+
+    // update live stats right after keystroke
+    const stat = computeStats();
+    showLiveStats(stat);
+
     return;
   }
 
-  // navigation keys while session running
-  if (key === 'ArrowLeft') {
-    if (cursor > 0) { cursor--; render(); }
-  } else if (key === 'ArrowRight') {
-    if (cursor < passageText.length) { cursor++; render(); }
-  }
-  // other modifier keys ignored (Shift/Ctrl/Alt)
+  if (key === 'ArrowLeft') { if (cursor > 0) { cursor--; render(); } }
+  else if (key === 'ArrowRight') { if (cursor < passageText.length) { cursor++; render(); } }
 });
 
-// Controls (start/restart, reload/reset from renderer2 UI)
+// Controls
 if (startBtn) startBtn.addEventListener('click', startSession);
 if (restartBtn) restartBtn.addEventListener('click', () => { resultsPanel.hidden = true; startSession(); });
 
-// reload/reset controls from renderer2-style index2.html if present
 const reloadBtn = $('reload');
 if (reloadBtn) {
   reloadBtn.addEventListener('click', () => {
     const sel = $('preset') ? $('preset').value : null;
     if (sel && (sel === 'short' || sel === 'long')) {
-      // load local preset immediately (useful when working offline)
       passageText = ({ short: "Съешь ещё этих мягких французских булок, да выпей же чаю.", long: "В те времена, когда ещё не было никаких тренажёров для скоропечатания, люди всё равно печатали быстро — кто пером, кто печатной машинкой, но с приходом компьютеров и приложений всё стало гораздо удобнее." })[sel] || '';
       cursor = 0;
       initStatuses();
       render();
-    } else {
-      // fallback: just focus trainer
-      if (trainer) trainer.focus();
-    }
+    } else { if (trainer) trainer.focus(); }
     if (trainer) trainer.focus();
   });
 }
@@ -314,13 +348,10 @@ if (resetBtn) {
     if (trainer) trainer.focus();
   });
 }
-
-// click into trainer to focus (so keydowns are captured)
 if (trainer) trainer.addEventListener('click', () => trainer.focus());
 
-// initial load: if passageText already present (or loaded inline), prepare status and render
+// initial load
 if (!passageText) {
-  // If you want initial passage from server, keep it empty or load default preset here.
   passageText = passageEl ? (passageEl.textContent || '') : '';
 }
 initStatuses();
