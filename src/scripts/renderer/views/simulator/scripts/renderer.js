@@ -1,5 +1,4 @@
-/* renderer.js — live stats версия */
-/* Заменяет/дополняет ваш текущий файл: живой вывод результатов во время тренинга. */
+/* renderer.js — live stats версия (modified to render AnyChart inside .card.text-chart) */
 
 const $ = (id) => document.getElementById(id);
 
@@ -21,15 +20,16 @@ let keystrokes = []; // array of {t_ms, key, position, correct}
 let cursor = 0;
 const statuses = []; // 'pending' | 'correct' | 'incorrect'
 
-// DOM
+// DOM (note: trainer/textDisplay elements are cached but not replaced permanently;
+// we only hide/show them so references remain valid)
 const startBtn = $('startBtn');
 const restartBtn = $('restart');
 const timerEl = $('timer');
 const passageEl = $('passage');
-const textDisplay = $('textDisplay');
-const trainer = $('trainer');
+let textDisplay = $('textDisplay');
+let trainer = $('trainer');
 const resultsPanel = $('resultsPanel');
-const chartDiv = $('chart');
+const chartDiv = $('chart'); // оставляем, но больше не используем для основного отображения
 const summaryDiv = $('summary');
 const languageSel = $('language');
 const durationSel = $('duration');
@@ -55,6 +55,11 @@ function initStatuses() {
 }
 
 function render() {
+  // ensure we have current references (в случае, если DOM пересоздавался извне)
+  textDisplay = $('textDisplay') || textDisplay;
+  trainer = $('trainer') || trainer;
+
+  if (!textDisplay) return;
   textDisplay.innerHTML = '';
   for (let i = 0; i < passageText.length; i++) {
     const ch = passageText[i];
@@ -76,7 +81,6 @@ function computeStats() {
   const totalChars = passageText.length;
   const correctChars = keystrokes.filter(k => k.correct).length;
   const errors = keystrokes.filter(k => !k.correct).length;
-  // если время почти 0, используем min 1s to avoid infinite wpm
   const minutes = Math.max((elapsedMs / 1000) / 60, 1 / 60);
   const wpm = ((correctChars / 5) / minutes) || 0;
   const accuracyVal = (correctChars + errors) > 0 ? (correctChars / (correctChars + errors)) : 1;
@@ -90,25 +94,90 @@ function computeStats() {
 }
 
 function showLiveStats(stat) {
-  // панель результатов — обновляем live
   if (words_per_minute) words_per_minute.textContent = stat.wpm.toFixed(1);
   if (accuracy) accuracy.textContent = `${(stat.accuracy * 100).toFixed(1)}%`;
   if (correct_chars) correct_chars.textContent = stat.correctChars || 0;
   if (error_chars) error_chars.textContent = stat.errors;
-  // краткое текстовое резюме (если нужно)
-  if (summaryDiv) {
-    summaryDiv.innerHTML = `
-      <div>WPM: ${stat.wpm.toFixed(1)}</div>
-      <div>Accuracy: ${(stat.accuracy * 100).toFixed(1)}%</div>
-      <div>Correct chars: ${stat.correctChars || 0}</div>
-      <div>Errors: ${stat.errors}</div>
-    `;
+}
+
+// --- card chart helpers ---
+// Создаёт контейнер #chart-in-card внутри .card.text-chart и возвращает его
+function ensureChartContainerInCard() {
+  const card = document.querySelector('.card.text-chart');
+  if (!card) return null;
+  let container = document.getElementById('chart-in-card');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'chart-in-card';
+    container.style.width = '100%';
+    container.style.height = '360px';
+    container.style.boxSizing = 'border-box';
+    container.setAttribute('aria-hidden', 'false');
+    // добавляем контейнер ПОСЛЕ #trainer, чтобы текст-тренажер был до него в DOM
+    card.appendChild(container);
+  } else {
+    container.innerHTML = '';
+  }
+  return container;
+}
+
+// Показать/отрисовать график в карточке (data — массив объектов {time, wpm, errors})
+function renderChartInCard(data) {
+  const container = ensureChartContainerInCard();
+  if (!container) return;
+
+  // скрываем интерфейс тренажёра (оставляем DOM, чтобы при рестарте вернуть)
+  if (trainer) {
+    trainer.style.display = 'none';
+    trainer.setAttribute('aria-hidden', 'true');
+  }
+
+  // AnyChart отрисовка
+  if (typeof anychart === 'undefined') {
+    container.textContent = 'AnyChart not loaded';
+    return;
+  }
+
+  anychart.onDocumentReady(function () {
+    // очищаем предыдущее содержимое контейнера (вдруг)
+    container.innerHTML = '';
+
+    var chart = anychart.cartesian();
+    var wpmSeriesPlot = chart.line(data.map(d => [d.time, d.wpm]));
+    wpmSeriesPlot.name('WPM').markers(true);
+    wpmSeriesPlot.tooltip().format('{%value}');
+    var errorsSeries = chart.column(data.map(d => [d.time, d.errors]));
+    errorsSeries.name('Errors/sec');
+    errorsSeries.yScale().ticks().interval(1);
+    chart.yScale().minimum(0);
+    chart.yAxis(0).title('WPM');
+    chart.yAxis(1).orientation('right').title('Errors/sec');
+    errorsSeries.yScale(chart.yScale());
+    chart.xAxis().title('Seconds');
+    chart.legend(true);
+    chart.container('chart-in-card');
+    chart.draw();
+  });
+}
+
+// Убирает график из карточки и возвращает тренажёр
+function restoreTrainerInCard() {
+  const container = document.getElementById('chart-in-card');
+  if (container) container.remove();
+  if (trainer) {
+    trainer.style.display = ''; // вернём дефолтное значение
+    trainer.removeAttribute('aria-hidden');
+    trainer.focus();
   }
 }
 
 // --- session lifecycle ---
 async function startSession() {
   try {
+    // при старте новой сессии убираем график и скрытые результаты
+    restoreTrainerInCard();
+    if (resultsPanel) resultsPanel.hidden = true;
+
     language = languageSel.value;
     duration = parseInt(durationSel.value, 10) || 60;
     punctuation = punctChk.checked ? 1 : 0;
@@ -174,6 +243,7 @@ function stopSession() {
           }
         }
         if (api && api.finalizeResults) {
+          textDisplay.setAttribute('textDisplay', 'results');
           await api.finalizeResults({ session_token: sessionToken, wpm, avg_wpm: wpm, errors, accuracy: acc, totalChars, total_chars: totalChars });
         }
       } catch (err) {
@@ -183,6 +253,7 @@ function stopSession() {
   } else {
     // если писали каждое нажатие, просто finalize
     if (api && api.finalizeResults) {
+      textDisplay.setAttribute('textDisplay', 'results');
       api.finalizeResults({ session_token: sessionToken, wpm, avg_wpm: wpm, errors, accuracy: acc, totalChars }).catch(console.error);
     }
   }
@@ -193,9 +264,7 @@ function stopSession() {
 
 // --- results/graphing (keeps previous showResults but live) ---
 function showResults(stat) {
-  resultsPanel.hidden = false;
-
-  // already show final numbers (reuse live updater)
+  // уже показываем итоговые числа
   showLiveStats(stat);
 
   // build per-second arrays for charting (optional)
@@ -218,29 +287,22 @@ function showResults(stat) {
     return +wpm.toFixed(2);
   });
 
-  // If you want a live chart: rebuild the anychart plot here.
-  // For simplicity and reliability we redraw chart once at the end.
-  if (typeof anychart !== 'undefined' && chartDiv) {
-    const data = [];
-    for (let i = 0; i < seconds; i++) data.push({ time: i, wpm: wpmPerSec[i], errors: errSeries[i] });
+  const data = [];
+  for (let i = 0; i < seconds; i++) data.push({ time: i, wpm: wpmPerSec[i], errors: errSeries[i] });
 
-    anychart.onDocumentReady(function () {
-      var chart = anychart.cartesian();
-      var wpmSeriesPlot = chart.line(data.map(d => [d.time, d.wpm]));
-      wpmSeriesPlot.name('WPM').markers(true);
-      wpmSeriesPlot.tooltip().format('{%value}');
-      var errorsSeries = chart.column(data.map(d => [d.time, d.errors]));
-      errorsSeries.name('Errors/sec');
-      errorsSeries.yScale().ticks().interval(1);
-      chart.yScale().minimum(0);
-      chart.yAxis(0).title('WPM');
-      chart.yAxis(1).orientation('right').title('Errors/sec');
-      errorsSeries.yScale(chart.yScale());
-      chart.xAxis().title('Seconds');
-      chart.legend(true);
-      chart.container('chart');
-      chart.draw();
-    });
+  // Отрисовываем график ВНУТРИ карточки .card.text-chart
+  try {
+    renderChartInCard(data);
+  } catch (err) {
+    console.error('renderChartInCard failed', err);
+  }
+
+  // прячем отдельную секцию результатов (чтобы не дублировать)
+  if (resultsPanel) resultsPanel.hidden = true;
+
+  // итоговый текст/summary можно заполнить в summaryDiv (если нужно)
+  if (summaryDiv) {
+    summaryDiv.innerHTML = `<div>WPM: ${stat.wpm.toFixed(1)}</div><div>Accuracy: ${(stat.accuracy*100).toFixed(1)}%</div><div>Errors: ${stat.errors || 0}</div>`;
   }
 }
 
@@ -324,7 +386,12 @@ window.addEventListener('keydown', (e) => {
 
 // Controls
 if (startBtn) startBtn.addEventListener('click', startSession);
-if (restartBtn) restartBtn.addEventListener('click', () => { resultsPanel.hidden = true; startSession(); });
+if (restartBtn) restartBtn.addEventListener('click', () => {
+  // при рестарте прячем панель результатов и возвращаем тренажер
+  if (resultsPanel) resultsPanel.hidden = true;
+  restoreTrainerInCard();
+  startSession();
+});
 
 const reloadBtn = $('reload');
 if (reloadBtn) {
