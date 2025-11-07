@@ -1,11 +1,11 @@
 :root {
-  --bg: #0f1115;
+  --bg: #060d16;
   --panel: #15181c;
   --muted: #9aa4b2;
-  --correct: #2dc933;
-  --incorrect: #ff3d3d;
-  --text: #e6eef6;
-  --pending: #ffffff;
+  --correct: #d1d0c5;
+  --incorrect: #7e2a33;
+  --text: #cdd4dc;
+  --pending: #646669;
   --caret: #88b4ff;
 }
 
@@ -31,7 +31,6 @@ header {
   display:flex;
   justify-content:space-between;
   align-items:center;
-  padding:12px 20px;
   background:var(--panel);
   border-bottom:1px solid rgba(255,255,255,0.03)
 }
@@ -138,8 +137,10 @@ button:hover {
   bottom: 0;
   width: 2px;
   background: var(--caret);
-  animation: blink 1s steps(2, start) infinite;
+  animation: blink 1s ease infinite;
 }
 @keyframes blink{
-  50%{opacity:0}
+  0%{opacity:0}
+  50%{opacity:1}
+  100%{opacity:0}
 }

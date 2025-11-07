@@ -138,26 +138,148 @@ function renderChartInCard(data) {
     return;
   }
 
+  // --- AnyChart отрисовка (замена проблемной части) ---
   anychart.onDocumentReady(function () {
-    // очищаем предыдущее содержимое контейнера (вдруг)
-    container.innerHTML = '';
+      container.innerHTML = '';
 
-    var chart = anychart.cartesian();
-    var wpmSeriesPlot = chart.line(data.map(d => [d.time, d.wpm]));
-    wpmSeriesPlot.name('WPM').markers(true);
-    wpmSeriesPlot.tooltip().format('{%value}');
-    var errorsSeries = chart.column(data.map(d => [d.time, d.errors]));
-    errorsSeries.name('Errors/sec');
-    errorsSeries.yScale().ticks().interval(1);
-    chart.yScale().minimum(0);
-    chart.yAxis(0).title('WPM');
-    chart.yAxis(1).orientation('right').title('Errors/sec');
-    errorsSeries.yScale(chart.yScale());
-    chart.xAxis().title('Seconds');
-    chart.legend(true);
-    chart.container('chart-in-card');
-    chart.draw();
-  });
+      const theme = {
+        containerBackground: '#0B1220',
+        plotBackground: '#071018',
+        plotBorder: '#08171eff',
+        gridLine: '#0d1b21ff',
+        axisStroke: '#192930ff',
+        labels: '#cfe7ff',
+        titles: '#eaf6ff',
+        wpm: { stroke: '#e2b714', strokeWidth: 1, markerFill: '#e2b714', markerStroke: '#e2b714', size: 1 },
+        errors: { fill: '#e11529', stroke: '#e11529', type: 'star4', size: 2 },
+        tooltip: { background: '#0f1720', fontColor: '#e6f2ff' }
+      };
+
+      container.style.background = theme.containerBackground;
+
+      var chart = anychart.cartesian();
+      chart.background().fill(theme.containerBackground);
+
+      // --- feature-detect plot support (совместимость с разными сборками/версиями AnyChart) ---
+      var plot;
+      if (typeof chart.plot === 'function') {
+        // стандартный API (AnyChart full)
+        plot = chart.plot(0) || chart;
+      } else if (typeof chart.getPlot === 'function') {
+        plot = chart.getPlot(0) || chart;
+      } else {
+        // fallback: используем chart как plot-owner (в некоторых сборках методы привязаны напрямую к chart)
+        plot = chart;
+      }
+
+      // --- безопастно задаём фон plot (если поддерживается) ---
+      try {
+        if (typeof plot.background === 'function') {
+          plot.background().fill(theme.plotBackground);
+          // stroke может отсутствовать в некоторых версиях background() возвращаемого объекта
+          if (plot.background().stroke && typeof plot.background().stroke === 'function') {
+            plot.background().stroke(theme.plotBorder);
+          }
+        } else {
+          // как fallback — оставить внешнее оформление контейнера
+          // container.style.background уже установлен
+        }
+      } catch (e) { /* ignore */ }
+
+      // --- безопасно включаем и стилизуем сетки (если поддерживается) ---
+      try {
+        if (typeof plot.xGrid === 'function') {
+          plot.xGrid(true);
+          if (plot.xGrid().stroke) plot.xGrid().stroke(theme.gridLine);
+        } else if (typeof chart.xGrid === 'function') {
+          chart.xGrid(true);
+          if (chart.xGrid().stroke) chart.xGrid().stroke(theme.gridLine);
+        }
+        if (typeof plot.yGrid === 'function') {
+          plot.yGrid(true);
+          if (plot.yGrid().stroke) plot.yGrid().stroke(theme.gridLine);
+        } else if (typeof chart.yGrid === 'function') {
+          chart.yGrid(true);
+          if (chart.yGrid().stroke) chart.yGrid().stroke(theme.gridLine);
+        }
+      } catch (e) { /* ignore */ }
+
+      // --- владелец для создания серий (plot или chart) ---
+      var seriesOwner = (typeof plot.spline === 'function' || typeof plot.marker === 'function') ? plot : chart;
+
+      // WPM (spline)
+      var wpmSeriesPlot = seriesOwner.spline(data.map(d => [d.time, d.wpm]));
+      wpmSeriesPlot.name('Слов в минуту');
+      wpmSeriesPlot.tooltip().format('{%value}');
+      try {
+        wpmSeriesPlot.stroke({ color: theme.wpm.stroke, thickness: theme.wpm.strokeWidth });
+        wpmSeriesPlot.markers().enabled(true).type('circle').size(theme.wpm.size).fill(theme.wpm.markerFill).stroke(theme.wpm.markerStroke);
+        
+      } catch (e) { /* ignore if methods differ */ }
+
+      // --- правая шкала для ошибок ---
+      function computeMaxY() {
+        var maxErrors = data.length ? Math.max(...data.map(d => d.errors)) : 0;
+        return maxErrors <= 0 ? 1 : Math.ceil(maxErrors + maxErrors / 3);
+      }
+      var rightScale = anychart.scales.linear();
+      rightScale.minimum(0);
+      rightScale.maximum(computeMaxY());
+
+      // Errors — маркеры
+      var errorPointsData = data.filter(d => d.errors > 0).map(d => [d.time, d.errors]);
+      var errorOwner = (typeof plot.marker === 'function') ? plot : chart;
+      var errorPoints = errorOwner.marker(errorPointsData);
+      errorPoints.name('Ошибок в секунду');
+      try {
+        errorPoints.type(theme.errors.type);
+        errorPoints.size(theme.errors.size);
+        errorPoints.fill(theme.errors.fill);
+        errorPoints.stroke(theme.errors.stroke);
+      } catch (e) { /* ignore */ }
+      errorPoints.yScale(rightScale);
+      errorPoints.tooltip().format('Ошибки: {%value}');
+
+      // --- оси и подписи (обычно доступны на chart) ---
+      try {
+        chart.yScale().minimum(0);
+        chart.yAxis(0).title('Слов в минуту').title().fontColor(theme.titles);
+        chart.yAxis(0).labels().fontColor(theme.labels);
+        chart.yAxis(0).stroke(theme.axisStroke);
+
+        chart.yAxis(1).orientation('right').title('Ошибок в секунду').scale(rightScale);
+        chart.yAxis(1).title().fontColor(theme.titles);
+        chart.yAxis(1).labels().fontColor(theme.labels);
+        chart.yAxis(1).stroke(theme.axisStroke);
+
+        chart.xAxis().title('Секунды').title().fontColor(theme.titles);
+        chart.xAxis().labels().fontColor(theme.labels);
+        chart.xAxis().stroke(theme.axisStroke);
+      } catch (e) { /* ignore */ }
+
+      try {
+        chart.legend(true);
+        chart.legend().labels().fontColor(theme.labels);
+      } catch (e) { /* ignore */ }
+
+      try {
+        if (chart.tooltip && chart.tooltip().background) {
+          chart.tooltip().background().fill(theme.tooltip.background);
+          chart.tooltip().fontColor(theme.tooltip.fontColor);
+        }
+      } catch (e) { /* ignore */ }
+
+      chart.container('chart-in-card');
+      chart.draw();
+
+      // пересчет правой шкалы при изменении данных/окна
+      function recalcRightScale() {
+        rightScale.maximum(computeMaxY());
+      }
+      recalcRightScale();
+      window.addEventListener('resize', recalcRightScale);
+    }
+  );  
 }
 
 // Убирает график из карточки и возвращает тренажёр
