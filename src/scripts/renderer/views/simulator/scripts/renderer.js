@@ -150,8 +150,8 @@ function renderChartInCard(data) {
         axisStroke: '#192930ff',
         labels: '#cfe7ff',
         titles: '#eaf6ff',
-        wpm: { stroke: '#e2b714', strokeWidth: 1, markerFill: '#e2b714', markerStroke: '#e2b714', size: 1 },
-        errors: { fill: '#e11529', stroke: '#e11529', type: 'star4', size: 2 },
+        wpm: { stroke: '#e2b714', strokeWidth: 2, markerFill: '#e2b714', markerStroke: '#e2b714', size: 3 },
+        errors: { fill: '#e11529', stroke: '#e11529', type: 'star4', size: 4 },
         tooltip: { background: '#0f1720', fontColor: '#e6f2ff' }
       };
 
