@@ -12,7 +12,7 @@
     display: grid;                                      /* используем CSS Grid для раскладки */
     gap: var(--gap);                                    /* расстояние между ячейками грида, берётся из переменной */
     grid-template-columns: 1fr 1.6fr 1.6fr 1.6fr 1fr;   /* определяем 5 колонок: 1fr, 1.6fr, 1.6fr, 1.6fr, 1fr */
-    grid-template-rows: 160px 160px 160px 160px;        /* фиксированные высоты 4-х рядов */
+    grid-template-rows: 155px 155px 155px 155px;        /* фиксированные высоты 4-х рядов */
     grid-template-areas: 
         "text-chart       text-chart      text-chart      text-chart      text-chart"  /* строка 1: текстовый график занимает все 5 колонок */
         "text-chart       text-chart      text-chart      text-chart      text-chart"  /* строка 2: повтор той же области (чтобы занять две строки) */
