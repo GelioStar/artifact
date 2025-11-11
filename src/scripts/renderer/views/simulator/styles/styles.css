@@ -22,22 +22,38 @@
 
 body {
   margin:0;
-  font-family:Inter,Segoe UI,Arial;
+  font-family:'Montserrat Regular',Inter,Segoe UI,Arial;
   background:var(--bg);
   color:var(--text)
 }
 
 header {
-  display:flex;
-  justify-content:space-between;
   align-items:center;
-  background:var(--panel);
-  border-bottom:1px solid rgba(255,255,255,0.03)
+  background:var(--bg);
 }
 
-.controls select, .controls input {
+.setup-panel select, .setup-panel input {
   margin-left:8px;
   margin-right:8px
+}
+
+.setup-panel {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    justify-content: space-between;
+    margin: 40px 0;
+    padding: 20px;
+    background: rgba(10, 0, 26, 0.5);
+    border-radius: 16px;
+    border: 1px solid rgba(132, 0, 255, 0.2);
+}
+
+@media (max-width: 768px) {
+    .setup-panel {
+        flex-direction: column;
+        align-items: center;
+    }
 }
 
 h1 {

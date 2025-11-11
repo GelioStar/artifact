@@ -9,11 +9,10 @@
   grid-template-columns: repeat(var(--cols), var(--cell-width));
   grid-template-rows: repeat(var(--rows), var(--cell-height));
   gap: var(--row-gap) var(--col-gap);
-  padding: 200px;
   position: absolute;
-  top: 50%;
-  left: 50%;
   transform: translate(-50%, -50%);
+  padding-top: 5%;
+  transform: scale(0.75);
 }
 
 .key-btn {
