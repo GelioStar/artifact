@@ -22,7 +22,7 @@
 
 body {
   margin:0;
-  font-family:'Montserrat Regular',Inter,Segoe UI,Arial;
+  font-family:Inter,Segoe UI,Arial;
   background:var(--bg);
   color:var(--text)
 }

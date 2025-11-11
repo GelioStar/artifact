@@ -4,16 +4,17 @@
 			"path": "."
 		},
 		{
-			"path": "versions/PROJECT_v1.2_fixed"
+			"path": "D:/#0_Андрей/TEMP/#4_DEMO/Result"
 		},
 		{
-			"path": "versions/PROJECT_v1.2_fixed_simulator"
+			"path": "D:/#0_Андрей/TEMP/#4_DEMO/Result_APP"
 		},
 		{
-			"path": "C:/Users/Lite/Pictures/ДЕМО2"
+			"path": "D:/#0_Андрей/TEMP/#4_DEMO/Result_APP_strict"
+		},
+		{
+			"path": "D:/#0_Андрей/TEMP/#4_DEMO/Result_APP_resized"
 		}
 	],
-	"settings": {
-		"liveServer.settings.multiRootWorkspaceName": "electron_simulator_app"
-	}
+	"settings": {}
 }

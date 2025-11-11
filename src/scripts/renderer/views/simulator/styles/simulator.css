@@ -12,8 +12,9 @@
     display: grid;                                      /* используем CSS Grid для раскладки */
     gap: var(--gap);                                    /* расстояние между ячейками грида, берётся из переменной */
     grid-template-columns: 1fr 1.6fr 1.6fr 1.6fr 1fr;   /* определяем 5 колонок: 1fr, 1.6fr, 1.6fr, 1.6fr, 1fr */
-    grid-template-rows: 155px 155px 155px 155px;        /* фиксированные высоты 4-х рядов */
+    grid-template-rows: 80px 160px 160px 160px 160px;        /* фиксированные высоты 4-х рядов */
     grid-template-areas: 
+        "timer simulator-setup simulator-setup simulator-setup startBtn" /* строка 0: область для настроек симулятора */
         "text-chart       text-chart      text-chart      text-chart      text-chart"  /* строка 1: текстовый график занимает все 5 колонок */
         "text-chart       text-chart      text-chart      text-chart      text-chart"  /* строка 2: повтор той же области (чтобы занять две строки) */
         "words-per-minute steno-keyboard  steno-keyboard  steno-keyboard  correct-chars" /* строка 3: мульти-колоночная раскладка для нижних блоков */
@@ -35,7 +36,7 @@
     justify-content:center;                            /* горизонтальное выравнивание элементов по центру */
     text-align:center;                                 /* выравнивание текста по центру (для многострочного текста) */
     box-shadow: 0 6px 20px rgba(24,24,24,0.04);        /* тонкая тень для объёма: x-offset 0, y-offset 6px, blur 20px, лёгкая прозрачность */
-    min-height: 72px;                                  /* минимальная высота карточки, чтобы избежать "схлопывания" */
+    min-height: 36rpx;                                  /* минимальная высота карточки, чтобы избежать "схлопывания" */
 }
 
 /* назначение областей грида для конкретных классов и дополнительные настройки */
@@ -63,6 +64,25 @@
 }
 .error-chars {
     grid-area: error-chars;                            /* привязка к области "error-chars" */
+}
+
+.simulator-setup {
+    grid-area: simulator-setup;                        /* привязка к области "simulator-setup" */
+    align-items:center;                                /* вертикальное центрирование содержимого внутри этого блока */
+    justify-content:space-between;                        /* выравнивание содержимого по началу (сверху) */
+    padding-top:4px;                                   /* небольшой отступ сверху для визуального баланса */
+}
+
+.timer {
+    grid-area: timer;                                  /* привязка к области "timer" */
+    align-items:center;                                /* вертикальное центрирование содержимого внутри этого блока */
+    justify-content:center;                            /* горизонтальное центрирование содержимого внутри этого блока */
+}
+
+.startBtn {
+    grid-area: startBtn;                               /* привязка к области "startBtn" */
+    align-items:center;                                /* вертикальное центрирование содержимого внутри этого блока */
+    justify-content:center;                            /* горизонтальное центрирование содержимого внутри этого блока */
 }
 
 /* визуальные стили для заголовков и субтитров внутри text-chart */
