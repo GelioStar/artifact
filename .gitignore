@@ -1,3 +1,6 @@
+src/scripts/renderer/views/simulator/data/typing.db
+server/app.db
+
 # Logs
 logs
 *.log
@@ -90,6 +93,3 @@ typings/
 
 # Electron-Forge
 out/
-
-src\scripts\renderer\views\simulator\data\typing.db
-server\app.db
