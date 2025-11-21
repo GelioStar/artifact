@@ -6,7 +6,7 @@ const fsPromises = require('fs').promises;
 const { pathToFileURL } = require('url');
 const oboe = require('oboe');
 
-let MAIN_JSON_PATH = path.join(__dirname, 'locales', 'main.json');
+let MAIN_JSON_PATH = path.join(__dirname, '..', 'locales', 'main.json');
 
 // --- подключаем IPC хэндлеры симулятора (если файл существует) ---
 try {
