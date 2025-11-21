@@ -1,5 +1,6 @@
 src/scripts/renderer/views/simulator/data/typing.db
 server/app.db
+versions/
 
 # Logs
 logs
