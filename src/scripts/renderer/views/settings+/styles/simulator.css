@@ -1,0 +1,126 @@
+:root {
+    --gap: 18px;            /* переменная: размер промежутка (gap) между ячейками грида */
+    --radius: 12px;         /* переменная: радиус скругления углов карточек */
+    --pad: 18px;            /* переменная: внутренний отступ (padding) карточек */
+    --bg: #000914;          /* переменная: основной фон карточек (белый) */
+    --border: #1e1e1e;      /* переменная: цвет рамки карточек (тёмно-серый) */
+    --muted: #6b6b6b;       /* переменная: "приглушённый" цвет для второстепенного текста */
+}
+
+/* контейнер сетки */
+.dashboard {
+    display: grid;                                      /* используем CSS Grid для раскладки */
+    gap: var(--gap);                                    /* расстояние между ячейками грида, берётся из переменной */
+    grid-template-columns: 1fr 1.6fr 1.6fr 1.6fr 1fr;   /* определяем 5 колонок: 1fr, 1.6fr, 1.6fr, 1.6fr, 1fr */
+    grid-template-rows: 80px 160px 160px 160px 160px;        /* фиксированные высоты 4-х рядов */
+    grid-template-areas: 
+        "timer simulator-setup simulator-setup simulator-setup startBtn" /* строка 0: область для настроек симулятора */
+        "text-chart       text-chart      text-chart      text-chart      text-chart"  /* строка 1: текстовый график занимает все 5 колонок */
+        "text-chart       text-chart      text-chart      text-chart      text-chart"  /* строка 2: повтор той же области (чтобы занять две строки) */
+        "words-per-minute steno-keyboard  steno-keyboard  steno-keyboard  correct-chars" /* строка 3: мульти-колоночная раскладка для нижних блоков */
+        "accuracy         steno-keyboard  steno-keyboard  steno-keyboard  error-chars"; /* строка 4: аналогично, с блоком steno-keyboard растянутым по 3 колонкам */
+    align-items: stretch;                               /* выравнивание содержимого по вертикали внутри каждой ячейки — растягиваем */
+    width: 100%;                                        /* контейнер занимает 100% доступной ширины родителя */
+    max-width: 1400px;                                  /* максимальная ширина для контроля ширины макета */
+    margin: 0 auto;                                     /* центрируем контейнер по горизонтали на странице */
+}
+
+/* общие стили для "карточек" (внутри каждой ячейки) */
+.card {
+    background: var(--bg);                             /* фон карточки из переменной --bg */
+    border: 2px solid var(--border);                   /* рамка 2px с цветом из --border */
+    border-radius: var(--radius);                      /* скругление углов по переменной --radius */
+    padding: var(--pad);                               /* внутренний отступ карточки по переменной --pad */
+    display:flex;                                      /* используем flex внутри карточки для центрирования содержимого */
+    align-items:center;                                /* вертикальное выравнивание элементов по центру внутри flex-контейнера */
+    justify-content:center;                            /* горизонтальное выравнивание элементов по центру */
+    text-align:center;                                 /* выравнивание текста по центру (для многострочного текста) */
+    box-shadow: 0 6px 20px rgba(24,24,24,0.04);        /* тонкая тень для объёма: x-offset 0, y-offset 6px, blur 20px, лёгкая прозрачность */
+    min-height: 36rpx;                                  /* минимальная высота карточки, чтобы избежать "схлопывания" */
+}
+
+/* назначение областей грида для конкретных классов и дополнительные настройки */
+.text-chart {
+    grid-area: text-chart;                             /* привязываем элемент к области "text-chart" в grid-template-areas */
+    display:flex;                                      /* внутри блока тоже используем flex для простого выравнивания элементов */
+    flex-direction:column;                             /* располагаем дочерние элементы вертикально (столбцом) */
+    gap:8px;                                           /* расстояние между дочерними элементами внутри .text-chart */
+    justify-content:center;                            /* вертикально центрируем содержимое в пределах блока */
+}
+.words-per-minute {
+    grid-area: words-per-minute;                       /* привязка к области "words-per-minute" */
+}
+.steno-keyboard {
+    grid-area: steno-keyboard;                         /* привязка к области "steno-keyboard" */
+    display:flex;                                      /* делаем flex-контейнер для внутреннего упорядочивания */
+    flex-direction:column;                             /* располагаем вложенные элементы вертикально */
+    gap:6px;                                           /* промежуток между вложенными элементами внутри steno-keyboard */
+}
+.correct-chars {
+    grid-area: correct-chars;                          /* привязка к области "correct-chars" */
+}
+.accuracy {
+    grid-area: accuracy;                               /* привязка к области "accuracy" */
+}
+.error-chars {
+    grid-area: error-chars;                            /* привязка к области "error-chars" */
+}
+
+.simulator-setup {
+    grid-area: simulator-setup;                        /* привязка к области "simulator-setup" */
+    align-items:center;                                /* вертикальное центрирование содержимого внутри этого блока */
+    justify-content:space-between;                        /* выравнивание содержимого по началу (сверху) */
+    padding-top:4px;                                   /* небольшой отступ сверху для визуального баланса */
+}
+
+.timer {
+    grid-area: timer;                                  /* привязка к области "timer" */
+    align-items:center;                                /* вертикальное центрирование содержимого внутри этого блока */
+    justify-content:center;                            /* горизонтальное центрирование содержимого внутри этого блока */
+}
+
+.startBtn {
+    grid-area: startBtn;                               /* привязка к области "startBtn" */
+    align-items:center;                                /* вертикальное центрирование содержимого внутри этого блока */
+    justify-content:center;                            /* горизонтальное центрирование содержимого внутри этого блока */
+}
+
+/* визуальные стили для заголовков и субтитров внутри text-chart */
+.text-chart .title {
+    font-size: 18px;                                   /* размер шрифта для заголовка */
+    font-weight:700;                                   /* жирность заголовка (bold) */
+    letter-spacing: .2px;                              /* небольшая межбуквенная интерференция для читабельности */
+}
+.text-chart .subtitle {
+    color: var(--muted);                               /* цвет субтитра — приглушённый (из переменной) */
+    font-size: 14px;                                   /* размер шрифта субтитра */
+}
+
+/* общие стили для лейблов внутри нескольких блоков (группой через запятую) */
+.words-per-minute .label,
+.accuracy .label,
+.correct-chars .label,
+.error-chars .label,
+.steno-keyboard .label {
+    font-weight: 700;                                   /* делаем лейблы жирными для акцента */
+    font-size: 16px;                                    /* размер шрифта для лейблов */
+}
+
+/* общие стили для значений (value) в нескольких блоках */
+.words-per-minute .value,
+.accuracy .value,
+.correct-chars .value,
+.error-chars .value {
+    margin-top:10px;                                   /* отступ сверху, чтобы отделить значение от лейбла */
+    font-size:24px;                                   /* крупный размер шрифта для числовых показателей */
+    font-weight:800;                                  /* очень жирный вес для числовых показателей */
+}
+
+/* дополнительные настройки, чтобы steno-keyboard выглядел как большой центральный блок */
+.steno-keyboard {
+    justify-content:flex-start;                        /* выравниваем содержимое сверху (в начале контейнера) */
+    padding: 20px;                                     /* переопределяем внутренний padding для этого блока (больше пространства) */
+}
+.steno-keyboard .label {
+    margin-bottom: 8px;                                /* отступ снизу у лейбла для отделения от "mock" клавиатуры */
+}

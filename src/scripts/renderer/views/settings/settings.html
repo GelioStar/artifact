@@ -1,0 +1,26 @@
+<!-- settings/settings.html -->
+<div class="view settings-view">
+  <h2>Настройки</h2>
+  <section class="theme-section">
+    <label for="themeColor">Тема приложения — основной цвет</label>
+    <input id="themeColor" type="color" />
+    <button id="saveThemeBtn" class="btn-primary">Сохранить тему</button>
+  </section>
+
+  <section class="password-section">
+    <h3>Изменить пароль</h3>
+    <input id="oldPassword" type="password" placeholder="Старый пароль" />
+    <input id="newPassword" type="password" placeholder="Новый пароль" />
+    <button id="changePasswordBtn" class="btn-primary">Изменить пароль</button>
+    <div id="changePasswordResult" class="result"></div>
+  </section>
+
+  <section class="delete-section">
+    <h3>Удалить аккаунт</h3>
+    <p>Это действие необратимо. Будут удалены все ваши данные на сервере.</p>
+    <input id="confirmDelete" type="checkbox" /> <label for="confirmDelete">Я понимаю и хочу удалить аккаунт</label><br/>
+    <button id="deleteAccountBtn" class="btn-danger">Удалить аккаунт</button>
+    <div id="deleteAccountResult" class="result"></div>
+  </section>
+  <script src="./renderer.js" defer></script>
+</div>
