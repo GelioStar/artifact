@@ -1,86 +1,94 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8" />
-    <title>Project</title>
-    <link rel="stylesheet" href="styles/index.css"/>
-    <link rel="stylesheet" href="./attribute_ripple/attribute-ripple.css">
-    <link rel="stylesheet" href="styles/aside-bar.css">
-    <link rel="stylesheet" href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css'>
+  <meta charset="UTF-8" />
+  <title data-i18n="app.title">Project</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="styles/index.css"/>
+  <link rel="stylesheet" href="./attribute_ripple/attribute-ripple.css">
+  <link rel="stylesheet" href="styles/aside-bar.css">
+  <link rel="stylesheet" href='https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css'>
+  <style>
+    /* Небольшие стили для селектора локали в шапке */
+    #i18n-control { display:flex; gap:8px; align-items:center; padding:8px; }
+    #lang-select { padding:4px 8px; border-radius:4px; }
+    #lang-cycle-btn { padding:6px 10px; border-radius:4px; cursor:pointer; }
+  </style>
 </head>
 <body>
     <aside class="sidebar open">
         <div class="logo-details">
-            <div class="logo_name">Artifact</div>
+            <div class="logo_name" data-i18n="app.title">Project</div>
             <i class='bx bx-menu' id="btn"></i>
         </div>
+
+        <!-- i18n control (видно по умолчанию, можно спрятать) -->
+        <div id="i18n-control" style="padding:8px;">
+          <label for="lang-select" style="font-size:0.9rem" data-i18n="i18n.select_label">Language</label>
+          <select id="lang-select" aria-label="Language selector"></select>
+          <button id="lang-cycle-btn" type="button" title="Cycle locales">⟳</button>
+        </div>
+
         <ul class="nav-list">
             <li data-ripple>
                 <i class='bx bx-search'></i>
-                <input type="text" placeholder="Поиск...">
-                <span class="tooltip">Поиск</span>
+                <input type="text" placeholder="" data-i18n-placeholder="search.placeholder">
+                <span class="tooltip" data-i18n="tooltip.search">Поиск</span>
             </li>
             <li data-ripple>
-                <a id="home" href=".\scripts\renderer\views\home\home.html" draggable="false" ondragstart="return false">
+                <a id="home" href="./scripts/renderer/views/home/home.html" draggable="false" ondragstart="return false">
                     <i class='bx bxs-home'></i>
-                    <span class="links_name">Главная</span>
+                    <span class="links_name" data-i18n="nav.home">Главная</span>
                 </a>
-                <span class="tooltip">Главная</span>
+                <span class="tooltip" data-i18n="nav.home">Главная</span>
             </li>
             <li data-ripple>
                 <a id="game" href="#" draggable="false" ondragstart="return false">
                     <i class='bx bxs-grid-alt'></i>
-                    <span class="links_name">Играть</span>
+                    <span class="links_name" data-i18n="nav.play">Играть</span>
                 </a>
-                <span class="tooltip">Играть</span>
+                <span class="tooltip" data-i18n="nav.play">Играть</span>
             </li>
-            <!-- <li data-ripple>
-                <a href="#" draggable="false" ondragstart="return false">
-                    <i class='bx bxs-user'></i>
-                    <span class="links_name">Профиль</span>
-                </a>
-                <span class="tooltip">Профиль</span>
-            </li> -->
             <li data-ripple>
                 <a id="messages" href="#" draggable="false" ondragstart="return false">
                     <i class='bx bxs-chat'></i>
-                    <span class="links_name">Сообщения</span>
+                    <span class="links_name" data-i18n="nav.messages">Сообщения</span>
                 </a>
-                <span class="tooltip">Сообщения</span>
+                <span class="tooltip" data-i18n="nav.messages">Сообщения</span>
             </li>
             <li data-ripple>
-                <a id="training" href=".\scripts\renderer\views\simulator\simulator.html" draggable="false" ondragstart="return false">
+                <a id="training" href="./scripts/renderer/views/simulator/simulator.html" draggable="false" ondragstart="return false">
                     <i class='bx bxs-pie-chart-alt-2'></i>
-                    <span class="links_name">Тренажер</span>
+                    <span class="links_name" data-i18n="nav.training">Тренажер</span>
                 </a>
-                <span class="tooltip">Тренажер</span>
+                <span class="tooltip" data-i18n="nav.training">Тренажер</span>
             </li>
             <li data-ripple>
                 <a id="news" href="#" draggable="false" ondragstart="return false">
                     <i class='bx bxs-folder'></i>
-                    <span class="links_name">Новости</span>
+                    <span class="links_name" data-i18n="nav.news">Новости</span>
                 </a>
-                <span class="tooltip">Новости</span>
+                <span class="tooltip" data-i18n="nav.news">Новости</span>
             </li>
             <li data-ripple>
-                <a id="settings" href=".\scripts\renderer\views\settings\settings.html" draggable="false" ondragstart="return false">
+                <a id="settings" href="./scripts/renderer/views/settings/settings.html" draggable="false" ondragstart="return false">
                     <i class='bx bxs-cog'></i>
-                    <span class="links_name">Настройки</span>
+                    <span class="links_name" data-i18n="nav.settings">Настройки</span>
                 </a>
-                <span class="tooltip">Настройки</span>
+                <span class="tooltip" data-i18n="nav.settings">Настройки</span>
             </li>
             <li class="profile">
                 <div class="profile-details">
                     <img src="img/logo.png" alt="profileImg">
                     <div class="name_job">
-                        <div class="username">@username</div>
+                        <div class="username" data-i18n="profile.username">@username</div>
                     </div>
                 </div>
-                <i id="log_out" class='bx bx-log-out-circle'>
-                </i>
+                <i id="log_out" class='bx bx-log-out-circle' title="Logout"></i>
             </li>
         </ul>
     </aside>
+
     <main class="home-section">
         <webview id="guest"
             src="./scripts/renderer/views/home/home.html"
@@ -94,10 +102,112 @@
     <script src="scripts/aside-bar/aside-bar.js"></script>
     <script src="renderer.js"></script>
 
-    
-    <!-- <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="scripts/renderer/routing/route.js"></script>
-    <script src="scripts/renderer/routing/router.js"></script>
-    <script src="scripts/renderer/routing/app.js"></script> -->
+    <!-- i18n host helper: применяет переводы к DOM и взаимодействует с API из preload -->
+    <script>
+      (function () {
+        // вспомогательные функции
+        function resolveKey(obj, path) {
+          if (!obj || !path) return null;
+          return path.split('.').reduce((acc, k) => (acc && acc[k] !== undefined) ? acc[k] : null, obj);
+        }
+        function interpolate(str, vars = {}) {
+          if (typeof str !== 'string') return str;
+          return str.replace(/\{\{(\w+)\}\}/g, (_, n) => (vars[n] !== undefined ? vars[n] : ''));
+        }
+
+        function applyTranslations(translations) {
+          if (!translations || typeof translations !== 'object') return;
+          // textContent
+          document.querySelectorAll('[data-i18n]').forEach(el => {
+            const key = el.getAttribute('data-i18n');
+            const raw = resolveKey(translations, key);
+            if (raw === null || raw === undefined) return;
+            // collect placeholder vars from data-i18n-* attributes
+            const vars = {};
+            Array.from(el.attributes).forEach(attr => {
+              if (attr.name.startsWith('data-i18n-') && attr.name !== 'data-i18n') {
+                const varName = attr.name.slice('data-i18n-'.length);
+                vars[varName] = attr.value;
+              }
+            });
+            el.textContent = interpolate(raw, vars);
+          });
+          // placeholder attributes
+          document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+            const key = el.getAttribute('data-i18n-placeholder');
+            const raw = resolveKey(translations, key);
+            if (raw === null || raw === undefined) return;
+            el.setAttribute('placeholder', raw);
+          });
+        }
+
+        // Fill locales selector and wire up change/cycle button
+        async function initLocaleControls() {
+          if (!window.i18n) return;
+          const sel = document.getElementById('lang-select');
+          const btn = document.getElementById('lang-cycle-btn');
+          try {
+            const res = await window.i18n.available();
+            const locales = Array.isArray(res) ? res : (res && res.locales) ? res.locales : [];
+            if (!sel || !locales.length) return;
+            sel.innerHTML = '';
+            locales.forEach(l => sel.appendChild(new Option(l, l)));
+            const curRes = await window.i18n.getCurrent();
+            const cur = (typeof curRes === 'string') ? curRes : (curRes && curRes.locale) ? curRes.locale : curRes;
+            if (cur && locales.includes(cur)) sel.value = cur;
+            // on change
+            sel.addEventListener('change', async () => {
+              try { await window.i18n.setCurrent(sel.value); } catch (e) { console.error(e); }
+            });
+            // cycle button (local handler uses existing global cycleLocale if provided)
+            btn.addEventListener('click', async () => {
+              try {
+                if (window.cycleLocale) await window.cycleLocale();
+                else {
+                  // fallback: cycle locally
+                  const curVal = sel.value;
+                  let idx = locales.indexOf(curVal);
+                  if (idx === -1) idx = 0;
+                  const next = locales[(idx + 1) % locales.length];
+                  sel.value = next;
+                  await window.i18n.setCurrent(next);
+                }
+              } catch (e) { console.error(e); }
+            });
+          } catch (err) {
+            console.error('initLocaleControls error', err);
+          }
+        }
+
+        // Apply initial translations on load and register update listener
+        document.addEventListener('DOMContentLoaded', async () => {
+          try {
+            await initLocaleControls();
+
+            if (window.i18n && window.i18n.getCurrent && window.i18n.load) {
+              const curRes = await window.i18n.getCurrent();
+              const cur = (typeof curRes === 'string') ? curRes : (curRes && curRes.locale) ? curRes.locale : curRes;
+              const loadRes = await window.i18n.load(cur);
+              if (loadRes && loadRes.ok && loadRes.data) {
+                applyTranslations(loadRes.data);
+              }
+            }
+
+            // listen for broadcasts from main (setCurrent triggers main broadcast)
+            if (window.i18n && window.i18n.onUpdate) {
+              window.i18n.onUpdate((payload) => {
+                if (!payload) return;
+                const data = payload.data || payload;
+                applyTranslations(data);
+                // forward to webview(s) if you want immediate local forward (main already broadcasts)
+                // document.querySelectorAll('webview').forEach(wv => wv.send('i18n:update', payload));
+              });
+            }
+          } catch (e) {
+            console.error('i18n host init failed', e);
+          }
+        });
+      })();
+    </script>
 </body>
 </html>

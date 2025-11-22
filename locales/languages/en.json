@@ -1,0 +1,19 @@
+{
+  "app": {
+    "title": "Project",
+    "welcome": "Welcome, {{name}}!"
+  },
+  "nav": {
+    "home": "Home",
+    "play": "Play",
+    "settings": "Settings",
+    "news": "News"
+  },
+  "simulator": {
+    "start": "Start",
+    "duration": "Duration",
+    "punctuation": "Punctuation",
+    "words_per_minute": "Words / minute",
+    "accuracy": "Accuracy"
+  }
+}

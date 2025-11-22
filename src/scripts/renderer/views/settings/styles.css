@@ -7,6 +7,8 @@
 }
 .settings-view h2 {
     margin-top: 0;
+    color: #f0f0f0;
+    background-color: #f0f0f0;
 }
 .theme-section, .password-section, .delete-section {
     margin: 12px 0;

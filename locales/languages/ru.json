@@ -1,0 +1,19 @@
+{
+  "app": {
+    "title": "Проект",
+    "welcome": "Добро пожаловать, {{name}}!"
+  },
+  "nav": {
+    "home": "Главная",
+    "play": "Играть",
+    "settings": "Настройки",
+    "news": "Новости"
+  },
+  "simulator": {
+    "start": "Старт",
+    "duration": "Длительность",
+    "punctuation": "Пунктуация",
+    "words_per_minute": "Слов в минуту",
+    "accuracy": "Точность"
+  }
+}
