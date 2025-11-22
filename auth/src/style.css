@@ -25,10 +25,18 @@ html,body{height:100%;}
 body {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
   margin: 0;
-  background: linear-gradient(180deg,var(--bg), #060709 120%);
+  background: var(--surface);
+  background-image:
+    radial-gradient(at 1% 98%, hsla(277,33%,6%,1) 0px, transparent 80%),
+    radial-gradient(at 98% 1%, hsla(289,20%,2%,1) 0px, transparent 70%);
   color: var(--text);
   -webkit-font-smoothing:antialiased;
   -moz-osx-font-smoothing:grayscale;
+  -webkit-user-select: none;
+	-khtml-user-select: none;
+	-moz-user-select: none;
+	-ms-user-select: none;
+	user-select: none;
 }
 
 .container{
@@ -60,10 +68,12 @@ h1,h2{
   position: absolute;
   top: 0; right: 0; bottom: 0; left: 0;
   background-image:
-    radial-gradient(at 15% 20%, hsla(215,83%,8%,1) 0px, transparent 70%),
-    radial-gradient(at 67% 70%, hsla(298,59%,9%,1) 0px, transparent 50%);
-  filter: blur(3px);
-  transform: scale(1.1);
+    radial-gradient(at 15% 20%, #001a2b 0px, transparent 60%),
+    radial-gradient(at 80% 76%, #002347 0px, transparent 50%);
+
+    /* radial-gradient(at 15% 20%, hsla(215,83%,8%,1) 0px, transparent 50%),
+    radial-gradient(at 75% 75%, hsla(298,59%,9%,1) 0px, transparent 50%); */
+  filter: blur(1px);
   z-index: 0;
 }
 
@@ -134,25 +144,12 @@ a{
 }
 
 /* Primary button — Blue */
-button#loginBtn, button#registerBtn{
+button#loginBtn, button#registerBtn button#logoutBtn{
   background: linear-gradient(180deg,var(--accent), var(--accent-strong));
   color: #fff;
   box-shadow: 0 6px 14px rgba(0,96,180,0.18);
 }
-button#loginBtn:hover, button#registerBtn:hover{ background: linear-gradient(180deg,var(--accent-strong), #004a9a); }
-
-/* Secondary / ghost button */
-button#showRegister, button#showLogin, button#logoutBtn{
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid rgba(255,255,255,0.04);
-  box-shadow: none;
-  cursor: pointer;
-}
-button#showRegister:hover, button#showLogin:hover, button#logoutBtn:hover{
-  color:var(--text);
-  border-color: rgba(255,255,255,0.06);
-}
+button#loginBtn:hover, button#registerBtn:hover button#logoutBtn:hover{ background: linear-gradient(180deg,var(--accent-strong), #004a9a); }
 
 /* Small utility classes */
 button[disabled]{ opacity:0.5; cursor:not-allowed; transform:none; }

@@ -80,14 +80,14 @@
 
     // Простая валидация на клиенте: проверяем, что введены обязательные поля
     // Это не заменяет валидацию на сервере — всегда проверяйте данные на сервере тоже.
-    if(!username || !password){ showMsg(regMsg, 'Username and password required', false); return; }
+    if(!username || !password){ showMsg(regMsg, 'Имя пользователя и пароль', false); return; }
     // Проверяем совпадение паролей — частая причина ошибок у пользователей
-    if(password !== confirm){ showMsg(regMsg, 'Passwords do not match', false); return; }
+    if(password !== confirm){ showMsg(regMsg, 'Пароли не совпадают', false); return; }
 
     // Блокируем кнопку, чтобы пользователь не кликнул много раз пока идёт запрос
     registerBtn.disabled = true;
     // Показываем пользователю прогресс/состояние
-    showMsg(regMsg, 'Registering...', true);
+    showMsg(regMsg, 'Проходим регистрацию...', true);
 
     try {
       // window.auth — API, переданное из preload (Electron). Предполагается, что
@@ -99,7 +99,7 @@
         // Замечание по безопасности: localStorage прост в использовании, но не самый безопасный
         // вариант для критичных данных — при атаке XSS токен может быть похищен.
         localStorage.setItem('sessionToken', res.token);
-        showMsg(regMsg, 'Registered successfully', true);
+        showMsg(regMsg, 'Поздравляем! Добро пожаловать!', true);
         // Показываем профиль сразу после успешной регистрации
         showProfile(res.user);
         if (window.bridge && typeof window.bridge.authenticated === 'function') {
@@ -107,12 +107,12 @@
         }
       } else {
         // Если сервер вернул ошибку, показываем её. res.error может быть строкой от API.
-        showMsg(regMsg, res.error || 'Registration failed', false);
+        showMsg(regMsg, res.error || 'Регистрация отклонена.', false);
       }
     } catch (err) {
       // Отлавливаем неожиданные ошибки (сеть, баг в API и т.п.)
       console.error(err);
-      showMsg(regMsg, 'Unexpected error', false);
+      showMsg(regMsg, 'Сервер временно недоступен. Повторите попытку позже.', false);
     } finally { registerBtn.disabled = false; }
   });
 
@@ -123,24 +123,24 @@
   loginBtn.addEventListener('click', async ()=>{
     const username = $('logUsername').value.trim();
     const password = $('logPassword').value;
-    if(!username || !password){ showMsg(logMsg, 'Username and password required', false); return; }
+    if(!username || !password){ showMsg(logMsg, 'Требуется ввести имя пользователя и(или) пароль.', false); return; }
     loginBtn.disabled = true;
-    showMsg(logMsg, 'Logging in...', true);
+    showMsg(logMsg, 'Входим в систему...', true);
     try {
       const res = await window.auth.login({ username, password });
       if(res.success){
         localStorage.setItem('sessionToken', res.token);
-        showMsg(logMsg, 'Logged in', true);
+        showMsg(logMsg, 'Поздравляем! Добро пожаловать!', true);
         showProfile(res.user);
         if (window.bridge && typeof window.bridge.authenticated === 'function') {
           window.bridge.authenticated(res.token);
         }
       } else {
-        showMsg(logMsg, res.error || 'Login failed', false);
+        showMsg(logMsg, res.error || 'Вход отклонен.', false);
       }
     } catch (err) {
       console.error(err);
-      showMsg(logMsg, 'Unexpected error', false);
+      showMsg(logMsg, 'Сервер временно недоступен. Повторите попытку позже.', false);
     } finally { loginBtn.disabled = false; }
   });
 
@@ -188,7 +188,3 @@
     }
   })();
 })();
-
-document.addEventListener('dom-ready', () => {
-  document.openDevTools();
-});

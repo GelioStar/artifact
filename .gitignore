@@ -1,8 +1,8 @@
 src/scripts/renderer/views/simulator/data/typing.db
 server/app.db
 versions/
-
 addscripts/
+artifact.code-workspace
 
 # Logs
 logs
