@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Artifact: Авторизация</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <div id="forms">
+      <div class="card" id="loginCard">
+        <h2>Вход</h2>
+        <div class="field"><input id="logUsername" placeholder="Имя пользователя"/></div>
+        <div class="field"><input id="logPassword" type="password" placeholder="Пароль"/></div>
+        <div class="actions">
+          <button id="loginBtn">Войти</button>
+          <a id="showRegister">Зарегистрироваться</a>
+        </div>
+        <div class="msg" id="logMsg"></div>
+      </div>
+
+      <div class="card" id="registerCard" style="display:none;">
+        <h2>Регистрация</h2>
+        <div class="field"><input id="regUsername" placeholder="Имя пользователя"/></div>
+        <div class="field"><input id="regEmail" placeholder="Email (необязательно)"/></div>
+        <div class="field"><input id="regPassword" type="password" placeholder="Пароль"/></div>
+        <div class="field"><input id="regConfirm" type="password" placeholder="Повторите пароль"/></div>
+        <div class="actions">
+          <button id="registerBtn">Зарегистрироваться</button>
+          <a id="showLogin">У вас уже есть аккаунт? Войти</a>
+        </div>
+        <div class="msg" id="regMsg"></div>
+      </div>
+
+      
+    </div>
+
+    <div class="card" id="profileCard" style="display:none;">
+      <h2>Профиль пользователя</h2>
+      <div id="profileInfo"></div>
+      <div class="actions">
+        <button id="logoutBtn">Выйти</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="renderer.js"></script>
+</body>
+</html>

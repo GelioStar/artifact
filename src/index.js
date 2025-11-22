@@ -202,8 +202,10 @@ function createAuthWindow () {
     resizable: false,
     icon: path.join(__dirname, 'img', 'logo.png'),
   });
+  
+  authWindow.webContents.openDevTools({ mode: 'detach' });
   authWindow.removeMenu?.();
-  authWindow.loadFile(path.join(__dirname, 'auth', 'src', 'index.html'));
+  authWindow.loadFile(path.join(__dirname, '..', 'auth', 'src', 'index.html'));
   authWindow.on('closed', () => { authWindow = null; });
   return authWindow;
 }
@@ -312,3 +314,4 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
+

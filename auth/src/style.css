@@ -1,0 +1,174 @@
+/* style.css — Dark theme inspired by BlackRock visual language
+   - Dark charcoal background
+   - Soft elevated cards with subtle borders
+   - Cool blue accent for primary actions
+   - High contrast light text and muted secondary text
+*/
+:root{
+  --bg: #0b1116;           /* page background */
+  --surface: #0f1519;      /* cards, panels */
+  --muted-surface: #0b1216; /* slightly darker panel */
+  --card-border: rgba(255,255,255,0.04);
+  --text: #e7eef6;         /* main text */
+  --muted: #9aa6b3;        /* secondary text */
+  --accent: #0070c9;       /* primary action (cool blue) */
+  --accent-strong: #005bb5;/* hover/active */
+  --danger: #ff6b6b;       /* errors */
+  --success: #2ecc71;      /* success */
+  --radius: 10px;
+  --gap: 12px;
+  --glass-shadow: 0 6px 18px rgba(2,8,15,0.6);
+}
+
+/* Base layout */
+html,body{height:100%;}
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  margin: 0;
+  background: linear-gradient(180deg,var(--bg), #060709 120%);
+  color: var(--text);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+}
+
+.container{
+  padding: 4%;
+}
+
+h1,h2{
+  margin:0 0 12px 0;
+  color:var(--text);
+  font-weight:600;
+}
+
+/* Cards — elevated dark panels */
+.card {
+  position: relative;
+  background-color: hsla(0,0%,0%,1); /* базовый цвет */
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--glass-shadow);
+  overflow: hidden; /* чтобы псевдоэлемент не вылезал */
+  height: 276px;
+  display: flex;
+  flex-direction: column;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0; right: 0; bottom: 0; left: 0;
+  background-image:
+    radial-gradient(at 15% 20%, hsla(215,83%,8%,1) 0px, transparent 70%),
+    radial-gradient(at 67% 70%, hsla(298,59%,9%,1) 0px, transparent 50%);
+  filter: blur(3px);
+  transform: scale(1.1);
+  z-index: 0;
+}
+
+/* сам контент карточки (над псевдоэлементом) */
+.card > * {
+  position: relative;
+  z-index: 1;
+}
+
+
+/* Form fields */
+.field{margin:8px 0; display:flex; flex-direction:column;}
+.field label{
+  font-size:13px;
+  margin-bottom:6px;
+  color:var(--muted);
+}
+.field input{
+  padding:8px 10px;
+  border-radius:6px;
+  border:1px solid rgba(255,255,255,0.04);
+  background: linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+  color:var(--text);
+  font-size:14px;
+  outline:none;
+  transition:box-shadow .12s ease, border-color .12s ease, transform .06s ease;
+}
+.field input::placeholder{ color: rgba(151,161,170,0.5); }
+.field input:focus{
+  border-color: rgba(0,112,201,0.25);
+  box-shadow: 0 0 0 4px rgba(0,112,201,0.08);
+  transform:translateY(-1px);
+}
+
+/* Actions / buttons */
+.actions {
+  position: absolute;
+  bottom: 18px;
+  width: calc(100% - 36px); /* 36 = 2 * padding (18px) */
+  left: 18px;
+  display:flex;
+  flex-direction:column;
+}
+
+
+button{
+  appearance:none;
+  -webkit-appearance:none;
+  border:0;
+  padding:10px 14px;
+  border-radius:8px;
+  cursor:pointer;
+  font-weight:600;
+  font-size:14px;
+  transition:transform .06s ease, box-shadow .12s ease, background-color .12s ease;
+  margin-bottom: 2%;
+}
+button:active{ transform:translateY(1px); }
+
+a{
+  appearance:none;
+  -webkit-appearance:none;
+  border-radius:8px;
+  cursor:pointer;
+  font-weight:200;
+  font-size:14px;
+  color: var(--muted);
+}
+
+/* Primary button — Blue */
+button#loginBtn, button#registerBtn{
+  background: linear-gradient(180deg,var(--accent), var(--accent-strong));
+  color: #fff;
+  box-shadow: 0 6px 14px rgba(0,96,180,0.18);
+}
+button#loginBtn:hover, button#registerBtn:hover{ background: linear-gradient(180deg,var(--accent-strong), #004a9a); }
+
+/* Secondary / ghost button */
+button#showRegister, button#showLogin, button#logoutBtn{
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid rgba(255,255,255,0.04);
+  box-shadow: none;
+  cursor: pointer;
+}
+button#showRegister:hover, button#showLogin:hover, button#logoutBtn:hover{
+  color:var(--text);
+  border-color: rgba(255,255,255,0.06);
+}
+
+/* Small utility classes */
+button[disabled]{ opacity:0.5; cursor:not-allowed; transform:none; }
+.msg{ margin-top:10px; font-weight:600; }
+.msg.error{ color:var(--danger); }
+.msg.ok{ color:var(--success); }
+
+#profileInfo{ font-size:15px; color:var(--muted); }
+
+/* Responsive tweaks */
+@media (max-width:540px){
+  .actions{ flex-direction:column;}
+}
+
+/* Small accessibility helpers */
+a, button{ -webkit-tap-highlight-color: rgba(255,255,255,0.02); }
+
+/* Optional: visually hidden helper (for screen reader messages if added later) */
+.sr-only{ position:absolute !important; height:1px; width:1px; overflow:hidden; clip:rect(1px,1px,1px,1px); white-space:nowrap; }
