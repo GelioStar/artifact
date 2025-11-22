@@ -11,23 +11,23 @@
     <div id="forms">
       <div class="card" id="loginCard">
         <h2>Login</h2>
-        <div class="field"><label>Username</label><input id="logUsername" /></div>
-        <div class="field"><label>Password</label><input id="logPassword" type="password" /></div>
+        <div class="field"><label>Имя пользователя</label><input id="logUsername" /></div>
+        <div class="field"><label>Пароль</label><input id="logPassword" type="password" /></div>
         <div class="actions">
-          <button id="loginBtn">Login</button>
-          <button id="showRegister">Create account</button>
+          <button id="loginBtn">Вход</button>
+          <button id="showRegister">Нет аккаунта? Зарегистрироваться</button>
         </div>
         <div class="msg" id="logMsg"></div>
       </div>
 
       <div class="card" id="registerCard" style="display:none;">
-        <div class="field"><label>Username</label><input id="regUsername" /></div>
-        <div class="field"><label>Email (optional)</label><input id="regEmail" /></div>
-        <div class="field"><label>Password</label><input id="regPassword" type="password" /></div>
-        <div class="field"><label>Confirm</label><input id="regConfirm" type="password" /></div>
+        <div class="field"><label>Имя пользователя</label><input id="regUsername" /></div>
+        <div class="field"><label>Email (необязательно)</label><input id="regEmail" /></div>
+        <div class="field"><label>Пароль</label><input id="regPassword" type="password" /></div>
+        <div class="field"><label>Повторите пароль</label><input id="regConfirm" type="password" /></div>
         <div class="actions">
-          <button id="registerBtn">Register</button>
-          <button id="showLogin">Already have an account? Login</button>
+          <button id="registerBtn">Зарегистрироваться</button>
+          <button id="showLogin">У вас уже есть аккаунт? Войти</button>
         </div>
         <div class="msg" id="regMsg"></div>
       </div>
@@ -36,10 +36,10 @@
     </div>
 
     <div class="card" id="profileCard" style="display:none;">
-      <h2>Profile</h2>
+      <h2>Профиль пользователя</h2>
       <div id="profileInfo"></div>
       <div class="actions">
-        <button id="logoutBtn">Logout</button>
+        <button id="logoutBtn">Выйти</button>
       </div>
     </div>
   </div>

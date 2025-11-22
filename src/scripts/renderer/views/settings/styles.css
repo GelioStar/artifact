@@ -1,7 +1,36 @@
 /* settings/styles.css */
-.settings-view { padding: 16px; font-family: var(--font-family, Arial, sans-serif); }
-.settings-view h2 { margin-top: 0; }
-.theme-section, .password-section, .delete-section { margin: 12px 0; padding: 12px; border-radius: 8px; background: rgba(0,0,0,0.03); }
-.btn-primary { background: var(--primary-color, #3b82f6); color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; }
-.btn-danger { background: #ef4444; color:#fff; border:none; padding:8px 12px; border-radius:6px; cursor:pointer; }
-.result { margin-top:8px; color: #444; }
+.settings-view {
+    padding: 16px;
+    font-family: var(--font-family, Arial, sans-serif);
+    background: var(--background-color, #171717);
+    color: var(--text-color, #f8f8f8);
+}
+.settings-view h2 {
+    margin-top: 0;
+}
+.theme-section, .password-section, .delete-section {
+    margin: 12px 0;
+    padding: 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 1);
+}
+.btn-primary {
+    background: var(--primary-color, #3b82f6);
+    color:#fff;
+    border:none;
+    padding:8px 12px;
+    border-radius:6px;
+    cursor:pointer;
+}
+.btn-danger {
+    background: #ef4444;
+    color:#fff;
+    border:none;
+    padding:8px 12px;
+    border-radius:6px;
+    cursor:pointer;
+}
+.result {
+    margin-top:8px;
+    color: #444;
+}

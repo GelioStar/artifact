@@ -8,8 +8,6 @@ async function applyTheme(color) {
 
 // Save theme to local settings DB via a fetch to renderer script that writes to settings.db
 async function saveTheme(color) {
-    // persist in a local settings DB through a small renderer-side API (if app uses preload, adapt)
-    // We'll use localStorage as a fallback and also call a preload IPC if available.
     localStorage.setItem('app-theme-color', color);
     await applyTheme(color);
     // notify main/preload if available
