@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Generator, Optional, Dict, Any
 
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Header, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -22,11 +22,15 @@ pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 # --- DB helpers ---
 def ensure_db_file():
-    # create empty file if not present (not strictly necessary, but safe)
+    # создаём пустой файл .db если его нет
     if not os.path.exists(DB_PATH):
         open(DB_PATH, "a").close()
 
 def create_db_and_tables() -> None:
+    """
+    Создаём таблицы при старте и добавляем колонку icon_mime, если её нет.
+    Это позволяет безопасно мигрировать уже существующую БД.
+    """
     conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
     try:
         cur = conn.cursor()
@@ -38,33 +42,40 @@ def create_db_and_tables() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT UNIQUE NOT NULL,
                 email TEXT,
-                hashed_password TEXT,
-                created_at TEXT
+                hashed_password TEXT NOT NULL,
+                icon BLOB,
+                created_at TEXT NOT NULL
             )
         """)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS sessions (
                 token TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL,
-                created_at TEXT,
-                expires_at TEXT
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL
             )
         """)
+        # если колонки icon_mime ещё нет — добавим
+        cur.execute("PRAGMA table_info(users);")
+        cols = [r[1] for r in cur.fetchall()]
+        if "icon_mime" not in cols:
+            # ALTER TABLE ADD COLUMN безопасен — новая колонка будет NULL для старых записей
+            cur.execute("ALTER TABLE users ADD COLUMN icon_mime TEXT;")
         conn.commit()
     finally:
         conn.close()
 
 def _connect_db() -> sqlite3.Connection:
-    # timeout increases how long sqlite will wait for lock to clear.
+    # timeout увеличивает время ожидания освобождения блокировки SQLite
     conn = sqlite3.connect(DB_PATH, timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    # set pragmas per-connection to improve concurrency
+    # задаём pragma на соединение для лучшей конкуррентности
     try:
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous = NORMAL;")
-        conn.execute("PRAGMA busy_timeout = 30000;")  # milliseconds
+        conn.execute("PRAGMA busy_timeout = 30000;")  # миллисекунды
     except Exception:
-        # ignore pragma errors but print for debugging
+        # pragma могут не поддерживаться в некоторых окружениях — игнорируем, но логируем
         print("Warning: could not set pragmas on connection")
     return conn
 
@@ -77,7 +88,7 @@ def verify_password(plain: str, hashed: str) -> bool:
     except Exception:
         return False
 
-# Connection dependency: new connection per request
+# Connection dependency: новое соединение на каждый запрос
 def get_db() -> Generator[sqlite3.Connection, None, None]:
     conn = _connect_db()
     try:
@@ -144,8 +155,8 @@ def parse_iso_or_none(s: Optional[str]) -> Optional[datetime]:
 
 def execute_with_retry(cur_execute_func, *args, retries=5, backoff=0.05):
     """
-    cur_execute_func should be a callable that executes DB operation and optionally commits.
-    We'll retry on OperationalError with 'database is locked'.
+    cur_execute_func должен быть callable, исполняющим операцию с курсором (и commit при необходимости).
+    Повторим попытки при sqlite3.OperationalError с сообщением 'database is locked' или 'busy'.
     """
     import sqlite3
     attempt = 0
@@ -158,13 +169,54 @@ def execute_with_retry(cur_execute_func, *args, retries=5, backoff=0.05):
                 attempt += 1
                 if attempt > retries:
                     raise
-                # exponential-ish backoff
+                # экспоненциальный бэк-оф (простая версия)
                 sleep_t = backoff * attempt
                 time.sleep(sleep_t)
                 continue
             raise
 
-# --- Endpoints ---
+def extract_token(authorization_header: Optional[str], query_token: Optional[str]) -> Optional[str]:
+    """
+    Поддерживаем передачу токена либо в заголовке Authorization: Bearer <token>,
+    либо как query-параметр token.
+    """
+    if query_token:
+        return query_token
+    if not authorization_header:
+        return None
+    auth = authorization_header.strip()
+    if auth.lower().startswith("bearer "):
+        return auth.split(None, 1)[1]
+    return auth  # если передали просто сам токен в заголовке
+
+def get_user_row_from_token(token: str, db: sqlite3.Connection) -> Optional[sqlite3.Row]:
+    """
+    Проверяем валидность сессии по токену и возвращаем строку пользователя (users).
+    Возвращаем None если токен не валиден / истёк / пользователь удалён.
+    """
+    if not token:
+        return None
+    cur = db.cursor()
+    s = cur.execute("SELECT token, user_id, expires_at FROM sessions WHERE token = ?", (token,)).fetchone()
+    if not s:
+        return None
+    expires_at_str = s["expires_at"]
+    expires_dt = parse_iso_or_none(expires_at_str)
+    if expires_dt is None or expires_dt < datetime.now():
+        # удаляем некорректную/просроченную сессию
+        try:
+            def _del():
+                cur.execute("DELETE FROM sessions WHERE token = ?", (token,))
+                db.commit()
+                return True
+            execute_with_retry(_del, retries=3, backoff=0.02)
+        except Exception:
+            pass
+        return None
+    u = cur.execute("SELECT id, username, email, created_at FROM users WHERE id = ?", (s["user_id"],)).fetchone()
+    return u
+
+# --- Endpoints (existing) ---
 @app.post("/api/register")
 def register(payload: RegisterRequest, db: sqlite3.Connection = Depends(get_db)):
     username = (payload.username or "").strip()
@@ -177,7 +229,7 @@ def register(payload: RegisterRequest, db: sqlite3.Connection = Depends(get_db))
         return {"success": False, "error": "username or password too short (min username 2, password 6 chars)"}
 
     cur = db.cursor()
-    created_at = datetime.utcnow().isoformat()
+    created_at = datetime.now().isoformat()
     try:
         try:
             hashed = hash_password(password)
@@ -194,7 +246,28 @@ def register(payload: RegisterRequest, db: sqlite3.Connection = Depends(get_db))
 
         execute_with_retry(do_insert, retries=8, backoff=0.05)
         print(f"Registered new user: {username}")
-        return {"success": True, "message": "registered"}
+        user_id = cur.execute("SELECT id, username, email, created_at FROM users WHERE username = ?", (username,)).fetchone()["id"]
+
+        # создаём сессию
+        token = secrets.token_hex(32)
+        now_iso = datetime.now().isoformat()
+        expires_iso = (datetime.now() + timedelta(days=7)).isoformat()
+
+        def do_session_insert():
+            cur.execute(
+                "INSERT INTO sessions (token, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)",
+                (token, user_id, now_iso, expires_iso)
+            )
+            db.commit()
+            return True
+
+        execute_with_retry(do_session_insert, retries=6, backoff=0.05)
+
+        # читаем строку пользователя и вернём
+        row = cur.execute("SELECT id, username, email, created_at FROM users WHERE id = ?", (user_id,)).fetchone()
+        user = make_user_dict(row)
+        return {"success": True, "token": token, "user": user}
+    
     except sqlite3.IntegrityError:
         return {"success": False, "error": "username already exists"}
     except sqlite3.OperationalError as e:
@@ -223,8 +296,8 @@ def login(payload: LoginRequest, db: sqlite3.Connection = Depends(get_db)):
     # Create session with retry on locked DB
     for attempt in range(1, 6):
         token = secrets.token_hex(32)
-        now_iso = datetime.utcnow().isoformat()
-        expires_iso = (datetime.utcnow() + timedelta(days=7)).isoformat()
+        now_iso = datetime.now().isoformat()
+        expires_iso = (datetime.now() + timedelta(days=7)).isoformat()
         try:
             def do_session_insert():
                 cur.execute(
@@ -243,7 +316,7 @@ def login(payload: LoginRequest, db: sqlite3.Connection = Depends(get_db)):
             continue
         except sqlite3.OperationalError as e:
             print(f"OperationalError while creating session (attempt {attempt}):", e)
-            # short sleep then retry next loop iteration
+            # короткий sleep и повтор
             time.sleep(0.05 * attempt)
             continue
     return {"success": False, "error": "could not create session (db busy)"}
@@ -263,7 +336,7 @@ def get_user(token: Optional[str] = None, db: sqlite3.Connection = Depends(get_d
         cur.execute("DELETE FROM sessions WHERE token = ?", (token,))
         db.commit()
         return {"success": False, "error": "invalid token"}
-    if expires_dt < datetime.utcnow():
+    if expires_dt < datetime.now():
         cur.execute("DELETE FROM sessions WHERE token = ?", (token,))
         db.commit()
         return {"success": False, "error": "token expired"}
@@ -289,6 +362,116 @@ def logout(payload: Dict[str, Any], db: sqlite3.Connection = Depends(get_db)):
     except sqlite3.OperationalError as e:
         print("OperationalError on logout:", e)
         return {"success": False, "error": "database locked, try again"}
+
+# --- Новые эндпойнты для работы с иконкой профиля ---
+
+@app.post("/api/user/icon")
+async def upload_user_icon(
+    request: Request,
+    file: UploadFile = File(...),
+    authorization: Optional[str] = Header(None),
+    token: Optional[str] = None,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Загрузить или заменить иконку текущего пользователя.
+    Поддерживается передача токена в заголовке Authorization: Bearer <token>
+    или как query-параметр token.
+    """
+    # извлекаем токен (header или query)
+    token_val = extract_token(authorization, token)
+    if not token_val:
+        raise HTTPException(status_code=401, detail={"success": False, "error": "token required"})
+
+    # проверяем сессию и получаем пользователя
+    user_row = get_user_row_from_token(token_val, db)
+    if not user_row:
+        raise HTTPException(status_code=401, detail={"success": False, "error": "invalid or expired token"})
+
+    # ограничение размера файла (безопасность) — например 2 MiB
+    MAX_BYTES = 2 * 1024 * 1024
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail={"success": False, "error": "empty file"})
+    if len(content) > MAX_BYTES:
+        raise HTTPException(status_code=413, detail={"success": False, "error": "file too large (max 2MB)"})
+
+    # MIME-тип файла (например image/png, image/jpeg)
+    mime = file.content_type or "application/octet-stream"
+
+    cur = db.cursor()
+    try:
+        def do_update():
+            # используем sqlite3.Binary для записи BLOB
+            cur.execute("UPDATE users SET icon = ?, icon_mime = ? WHERE id = ?",
+                        (sqlite3.Binary(content), mime, user_row["id"]))
+            db.commit()
+            return True
+
+        execute_with_retry(do_update, retries=8, backoff=0.05)
+        return {"success": True, "message": "icon uploaded"}
+    except sqlite3.OperationalError as e:
+        print("OperationalError on upload_user_icon:", e)
+        raise HTTPException(status_code=500, detail={"success": False, "error": "database locked, try again"})
+    except Exception as e:
+        print("Error in upload_user_icon:", e)
+        raise HTTPException(status_code=500, detail={"success": False, "error": "internal error"})
+
+@app.delete("/api/user/icon")
+def delete_user_icon(
+    authorization: Optional[str] = Header(None),
+    token: Optional[str] = None,
+    db: sqlite3.Connection = Depends(get_db)
+):
+    """
+    Удалить (выгрузить) иконку текущего пользователя — очищает поле icon и icon_mime.
+    Токен — в заголовке Authorization или query-параметре token.
+    """
+    token_val = extract_token(authorization, token)
+    if not token_val:
+        return {"success": False, "error": "token required"}
+    user_row = get_user_row_from_token(token_val, db)
+    if not user_row:
+        return {"success": False, "error": "invalid or expired token"}
+
+    cur = db.cursor()
+    try:
+        def do_update():
+            cur.execute("UPDATE users SET icon = NULL, icon_mime = NULL WHERE id = ?", (user_row["id"],))
+            db.commit()
+            return True
+
+        execute_with_retry(do_update, retries=6, backoff=0.05)
+        return {"success": True, "message": "icon deleted"}
+    except sqlite3.OperationalError as e:
+        print("OperationalError on delete_user_icon:", e)
+        return {"success": False, "error": "database locked, try again"}
+    except Exception as e:
+        print("Error in delete_user_icon:", e)
+        return {"success": False, "error": "internal error"}
+
+@app.get("/api/user/icon/{user_id}")
+def get_user_icon(user_id: int, db: sqlite3.Connection = Depends(get_db)):
+    """
+    Отдать иконку пользователя как raw image bytes с корректным Content-Type.
+    Доступен публично по user_id (можно изменить логику — разрешить только для авторизованных запросов).
+    """
+    cur = db.cursor()
+    try:
+        row = cur.execute("SELECT icon, icon_mime FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not row or not row["icon"]:
+            # иконка не найдена
+            return JSONResponse(status_code=404, content={"success": False, "error": "icon not found"})
+        icon_bytes = row["icon"]
+        mime = row["icon_mime"] or "application/octet-stream"
+        # возвращаем raw bytes с правильным MIME
+        return Response(content=icon_bytes, media_type=mime)
+    except sqlite3.OperationalError as e:
+        print("OperationalError on get_user_icon:", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": "database locked, try again"})
+    except Exception as e:
+        print("Error in get_user_icon:", e)
+        return JSONResponse(status_code=500, content={"success": False, "error": "internal error"})
 
 # Run when executed directly
 if __name__ == "__main__":

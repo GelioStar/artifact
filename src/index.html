@@ -23,11 +23,11 @@
         </div>
 
         <!-- i18n control (видно по умолчанию, можно спрятать) -->
-        <div id="i18n-control" style="padding:8px;">
+        <!-- <div id="i18n-control" style="padding:8px;">
           <label for="lang-select" style="font-size:0.9rem" data-i18n="i18n.select_label">Language</label>
           <select id="lang-select" aria-label="Language selector"></select>
           <button id="lang-cycle-btn" type="button" title="Cycle locales">⟳</button>
-        </div>
+        </div> -->
 
         <ul class="nav-list">
             <li data-ripple>
@@ -79,7 +79,7 @@
             </li>
             <li class="profile">
                 <div class="profile-details">
-                    <img src="img/logo.png" alt="profileImg">
+                    <img src="{window.profile.getIconUrl(userId, token)}" alt="profileImg">
                     <div class="name_job">
                         <div class="username" data-i18n="profile.username">@username</div>
                     </div>
@@ -103,7 +103,7 @@
     <script src="renderer.js"></script>
 
     <!-- i18n host helper: применяет переводы к DOM и взаимодействует с API из preload -->
-    <script>
+    <!-- <script>
       (function () {
         // вспомогательные функции
         function resolveKey(obj, path) {
@@ -208,6 +208,6 @@
           }
         });
       })();
-    </script>
+    </script> -->
 </body>
 </html>

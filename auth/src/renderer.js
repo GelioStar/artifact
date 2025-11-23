@@ -1,21 +1,5 @@
-// renderer.js - front-end logic using window.auth (preload)
-//
-// Подробные комментарии ориентированы на начинающего JavaScript-программиста
-// (еще не джуна): объясняют, что делает каждый блок, почему это сделано так
-// и на что обращать внимание при доработке/отладке.
-
 (function(){
-  // Небольшая "мини-библиотека" — удобная функция для частого действия
-  // Возвращает элемент по id — короче чем писать document.getElementById каждый раз
-  // Почему стрелочная функция: компактная запись, не используется this.
   const $ = (id)=>document.getElementById(id);
-
-  // -----------------------------
-  // Forms and elements
-  // -----------------------------
-  // Здесь мы получаем ссылки на элементы DOM, с которыми будем работать.
-  // Сохраняем их в переменные для удобства и чтобы не делать повторный поиск в DOM.
-  // Пример: registerCard — карточка (div/form) регистрации, registerBtn — кнопка.
   const registerCard = $('registerCard');
   const loginCard = $('loginCard');
   const profileCard = $('profileCard');
@@ -105,6 +89,7 @@
         if (window.bridge && typeof window.bridge.authenticated === 'function') {
           window.bridge.authenticated(res.token);
         }
+        window.profile.upload("./src/img/asideBar/profile.png", res.token);
       } else {
         // Если сервер вернул ошибку, показываем её. res.error может быть строкой от API.
         showMsg(regMsg, res.error || 'Регистрация отклонена.', false);

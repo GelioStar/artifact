@@ -194,7 +194,7 @@ function createAuthWindow () {
     width: 320,
     height: 380,
     webPreferences: {
-      preload: path.join(__dirname, '..', 'auth', 'preload.js'),
+      preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false
     },
