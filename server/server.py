@@ -210,15 +210,15 @@ def login(payload: LoginRequest, db: sqlite3.Connection = Depends(get_db)):
     username = (payload.username or "").strip()
     password = payload.password or ""
     if not username or not password:
-        return {"success": False, "error": "invalid credentials"}
+        return {"success": False, "error": "Данные указаны неверно."}
 
     cur = db.cursor()
     row = cur.execute("SELECT id, username, email, hashed_password, created_at FROM users WHERE username = ?", (username,)).fetchone()
     if not row:
-        return {"success": False, "error": "invalid credentials"}
+        return {"success": False, "error": "Данные указаны неверно."}
 
     if not verify_password(password, row["hashed_password"]):
-        return {"success": False, "error": "invalid credentials"}
+        return {"success": False, "error": "Данные указаны неверно."}
 
     # Create session with retry on locked DB
     for attempt in range(1, 6):

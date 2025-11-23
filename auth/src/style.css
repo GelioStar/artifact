@@ -144,7 +144,7 @@ a{
 }
 
 /* Primary button — Blue */
-button#loginBtn, button#registerBtn button#logoutBtn{
+#loginBtn, #registerBtn, #logoutBtn{
   background: linear-gradient(180deg,var(--accent), var(--accent-strong));
   color: #fff;
   box-shadow: 0 6px 14px rgba(0,96,180,0.18);
