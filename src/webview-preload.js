@@ -1,5 +1,6 @@
 // webview-preload.js
 const { contextBridge, ipcRenderer } = require('electron');
+const API_BASE = process.env.AUTH_SERVER_URL || 'http://localhost:8000/api';
 
 // Existing API surface (keep your previous handlers)
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -15,39 +16,128 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getResults: (limit) => ipcRenderer.invoke('get-results', limit)
 });
 
-// --- i18n: receive updates from main and expose small API to guest page ---
-ipcRenderer.on('i18n:update', (event, payload) => {
-  try {
-    // payload: { locale, data }
-    window.dispatchEvent(new CustomEvent('i18n:update', { detail: payload }));
-  } catch (e) { /* ignore */ }
+function handleFetch(res) {
+  return res.json().then(j => j).catch(()=>({ success:false, error: 'Invalid JSON response' }));
+}
+
+function fetchWithAuth(url, opts = {}, token) {
+  const headers = opts.headers ? {...opts.headers} : {};
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return fetch(url, {...opts, headers});
+}
+
+contextBridge.exposeInMainWorld('auth', {
+  register: async (data) => {
+    const res = await fetch(`${API_BASE}/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+    });
+    return handleFetch(res);
+  },
+
+  login: async (data) => {
+    const res = await fetch(`${API_BASE}/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+    });
+    return handleFetch(res);
+  },
+
+  // getUser поддерживает передачу токена в заголовке Authorization (предпочтительно)
+  getUser: async (token) => {
+    const url = `${API_BASE}/user`;
+    const res = await fetchWithAuth(url, { method: 'GET' }, token);
+    return handleFetch(res);
+  },
+
+  logout: async (token) => {
+    const res = await fetch(`${API_BASE}/logout`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token })
+    });
+    return handleFetch(res);
+  },
 });
 
-// notify host that guest is ready to receive translations
-window.addEventListener('DOMContentLoaded', () => {
-  try {
-    ipcRenderer.sendToHost('guest-ready');
-  } catch (e) { /* ignore */ }
-});
+contextBridge.exposeInMainWorld('profile', {
+  uploadIcon: async (file, token) => {
+    if (!file) return { success: false, error: 'file required' };
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetchWithAuth(`${API_BASE}/user/icon`, {
+      method: 'POST',
+      body: form
+    }, token);
+    return handleFetch(res);
+  },
 
-// Expose helper API for guest page scripts
-contextBridge.exposeInMainWorld('i18n', {
-  // guest page can listen for updates via window.addEventListener('i18n:update', ...)
-  // but we also provide a helper to request the current locale immediately
-  getCurrent: async () => {
+  deleteIcon: async (token) => {
+    const res = await fetchWithAuth(`${API_BASE}/user/icon`, {
+      method: 'DELETE'
+    }, token);
+    return handleFetch(res);
+  },
+
+  getIconUrl: (userId, token) => {
+    if (userId === undefined || userId === null) return null;
+    const base = `${API_BASE}/user/icon/${encodeURIComponent(userId)}`;
+    if (token) {
+      return `${base}?token=${encodeURIComponent(token)}`;
+    }
+    return base;
+  },
+
+  fetchIconDataUrl: async (userId, token) => {
+    if (userId === undefined || userId === null) return { success: false, error: 'userId required' };
+    if (!token) return { success: false, error: 'token required for fetchIconDataUrl' };
     try {
-      const res = await ipcRenderer.invoke('get-current-locale');
-      return res && res.ok ? res.locale : null;
-    } catch (e) {
-      return null;
+      const res = await fetchWithAuth(`${API_BASE}/user/icon/${encodeURIComponent(userId)}`, { method: 'GET' }, token);
+      if (!res.ok) {
+        try {
+          const j = await res.json();
+          return { success: false, status: res.status, error: j && j.error ? j.error : 'failed to fetch icon' };
+        } catch (e) {
+          return { success: false, status: res.status, error: 'failed to fetch icon' };
+        }
+      }
+      const blob = await res.blob();
+      const dataUrl = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => { reader.abort(); reject(new Error("Failed to read blob")); };
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      });
+      return { success: true, dataUrl };
+    } catch (err) {
+      return { success: false, error: String(err) };
     }
   },
-  loadLocale: async (lang) => {
+
+  fetchIconBlob: async (userId, token) => {
+    if (userId === undefined || userId === null) return { success: false, error: 'userId required' };
+    if (!token) return { success: false, error: 'token required for fetchIconBlob' };
     try {
-      const res = await ipcRenderer.invoke('load-locale', lang);
-      return res && res.ok ? res : { ok: false };
-    } catch (e) {
-      return { ok: false, error: String(e) };
+      const res = await fetchWithAuth(`${API_BASE}/user/icon/${encodeURIComponent(userId)}`, { method: 'GET' }, token);
+      if (!res.ok) {
+        try {
+          const j = await res.json();
+          return { success: false, status: res.status, error: j && j.error ? j.error : 'failed to fetch icon' };
+        } catch (e) {
+          return { success: false, status: res.status, error: 'failed to fetch icon' };
+        }
+      }
+      const blob = await res.blob();
+      return { success: true, blob };
+    } catch (err) {
+      return { success: false, error: String(err) };
     }
   }
+});
+
+contextBridge.exposeInMainWorld('bridge', {
+  authenticated: (token) => {
+    try { ipcRenderer.send('auth:authenticated', token); } catch (e) { console.error(e); }
+  },
+  logoutNotify: () => {
+    try { ipcRenderer.send('auth:logout'); } catch (e) { console.error(e); }
+  },
 });

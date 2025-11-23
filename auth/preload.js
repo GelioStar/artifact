@@ -1,17 +1,12 @@
-// preload.js — для main window
+// preload.js — для renderer (auth + main). Экспортирует window.auth, window.profile, window.bridge, window.i18n
 const { contextBridge, ipcRenderer } = require('electron');
 
 const API_BASE = process.env.AUTH_SERVER_URL || 'http://localhost:8000/api';
 
 function handleFetch(res) {
-  // Попытка распарсить JSON; если не JSON — вернуть понятный объект ошибки
   return res.json().then(j => j).catch(()=>({ success:false, error: 'Invalid JSON response' }));
 }
 
-/**
- * Вспомогательная обёртка для fetch, добавляющая Authorization заголовок,
- * если передан token. Возвращает promise от fetch.
- */
 function fetchWithAuth(url, opts = {}, token) {
   const headers = opts.headers ? {...opts.headers} : {};
   if (token) {
@@ -20,9 +15,7 @@ function fetchWithAuth(url, opts = {}, token) {
   return fetch(url, {...opts, headers});
 }
 
-// --- auth API (как было, но getUser теперь поддерживает Authorization header) ---
 contextBridge.exposeInMainWorld('auth', {
-  // регистрация
   register: async (data) => {
     const res = await fetch(`${API_BASE}/register`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
@@ -30,7 +23,6 @@ contextBridge.exposeInMainWorld('auth', {
     return handleFetch(res);
   },
 
-  // логин
   login: async (data) => {
     const res = await fetch(`${API_BASE}/login`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
@@ -38,19 +30,14 @@ contextBridge.exposeInMainWorld('auth', {
     return handleFetch(res);
   },
 
-  // получение информации о пользователе
-  // если передан token, он будет передан в заголовке Authorization (предпочтительно)
-  // если token === null|undefined, будет выполнен запрос без авторизации
+  // getUser поддерживает передачу токена в заголовке Authorization (предпочтительно)
   getUser: async (token) => {
-    const url = `${API_BASE}/user` + (token ? `` : '');
-    // используем заголовок Authorization, если token есть
+    const url = `${API_BASE}/user`;
     const res = await fetchWithAuth(url, { method: 'GET' }, token);
     return handleFetch(res);
   },
 
-  // выход (logout)
   logout: async (token) => {
-    // сервер ожидает JSON { token }
     const res = await fetch(`${API_BASE}/logout`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token })
     });
@@ -58,33 +45,18 @@ contextBridge.exposeInMainWorld('auth', {
   },
 });
 
-// --- NEW: profile / icon API ---
-// API для загрузки, изменения и удаления иконки профиля пользователя.
-// Комментарии и названия методов на русском для удобства.
 contextBridge.exposeInMainWorld('profile', {
-  /**
-   * Загрузить или заменить иконку профиля.
-   * file — объект File или Blob из input[type=file] (например fileInput.files[0])
-   * token — (опционально) токен сессии; если передан, отправляется в Authorization заголовке
-   */
   uploadIcon: async (file, token) => {
     if (!file) return { success: false, error: 'file required' };
     const form = new FormData();
-    // поле называется file — так ожидает FastAPI UploadFile в сервере
     form.append('file', file);
-
     const res = await fetchWithAuth(`${API_BASE}/user/icon`, {
       method: 'POST',
       body: form
     }, token);
-    // возвращаем JSON-ответ (сервер отдаёт JSON)
     return handleFetch(res);
   },
 
-  /**
-   * Удалить иконку текущего пользователя.
-   * token — (обязательно) токен сессии
-   */
   deleteIcon: async (token) => {
     const res = await fetchWithAuth(`${API_BASE}/user/icon`, {
       method: 'DELETE'
@@ -92,16 +64,8 @@ contextBridge.exposeInMainWorld('profile', {
     return handleFetch(res);
   },
 
-  /**
-   * Получить публичный URL до иконки пользователя (для использования в <img src="...">)
-   * Если token передан — он добавляется в query string (?token=...) чтобы можно было
-   * использовать адрес в img tag'е (img не посылает Authorization-заголовок).
-   *
-   * Пример использования:
-   * <img src={window.profile.getIconUrl(userId, token)} />
-   */
   getIconUrl: (userId, token) => {
-    if (!userId && userId !== 0) return null;
+    if (userId === undefined || userId === null) return null;
     const base = `${API_BASE}/user/icon/${encodeURIComponent(userId)}`;
     if (token) {
       return `${base}?token=${encodeURIComponent(token)}`;
@@ -109,24 +73,12 @@ contextBridge.exposeInMainWorld('profile', {
     return base;
   },
 
-  /**
-   * Получить data URL (base64) иконки пользователя, выполнив fetch с Authorization заголовком.
-   * Это полезно, когда иконка приватная и требуется передать токен в заголовке.
-   * Возвращает строку 'data:<mime>;base64,...' или null при ошибке.
-   *
-   * Пример:
-   * const dataUrl = await window.profile.fetchIconDataUrl(userId, token);
-   * img.src = dataUrl;
-   */
   fetchIconDataUrl: async (userId, token) => {
-    if (!userId && userId !== 0) return { success: false, error: 'userId required' };
+    if (userId === undefined || userId === null) return { success: false, error: 'userId required' };
     if (!token) return { success: false, error: 'token required for fetchIconDataUrl' };
-
     try {
-      // запрашиваем иконку с заголовком Authorization
       const res = await fetchWithAuth(`${API_BASE}/user/icon/${encodeURIComponent(userId)}`, { method: 'GET' }, token);
       if (!res.ok) {
-        // пытаемся прочитать JSON-ошибку
         try {
           const j = await res.json();
           return { success: false, status: res.status, error: j && j.error ? j.error : 'failed to fetch icon' };
@@ -135,7 +87,6 @@ contextBridge.exposeInMainWorld('profile', {
         }
       }
       const blob = await res.blob();
-      // читаем Blob как data URL
       const dataUrl = await new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onerror = () => { reader.abort(); reject(new Error("Failed to read blob")); };
@@ -148,12 +99,8 @@ contextBridge.exposeInMainWorld('profile', {
     }
   },
 
-  /**
-   * Альтернатива: получить raw Blob (например, для дальнейшей обработки).
-   * Возвращает { success: true, blob } или { success:false, error }.
-   */
   fetchIconBlob: async (userId, token) => {
-    if (!userId && userId !== 0) return { success: false, error: 'userId required' };
+    if (userId === undefined || userId === null) return { success: false, error: 'userId required' };
     if (!token) return { success: false, error: 'token required for fetchIconBlob' };
     try {
       const res = await fetchWithAuth(`${API_BASE}/user/icon/${encodeURIComponent(userId)}`, { method: 'GET' }, token);
@@ -173,7 +120,6 @@ contextBridge.exposeInMainWorld('profile', {
   }
 });
 
-// Bridge для уведомлений main-процессу (как было)
 contextBridge.exposeInMainWorld('bridge', {
   authenticated: (token) => {
     try { ipcRenderer.send('auth:authenticated', token); } catch (e) { console.error(e); }
@@ -182,3 +128,32 @@ contextBridge.exposeInMainWorld('bridge', {
     try { ipcRenderer.send('auth:logout'); } catch (e) { console.error(e); }
   },
 });
+
+contextBridge.exposeInMainWorld('i18n', {
+  available: async () => {
+    const res = await ipcRenderer.invoke('available-locales');
+    return res && res.ok ? res.locales : [];
+  },
+  load: async (lang) => {
+    const res = await ipcRenderer.invoke('load-locale', lang);
+    return res && res.ok ? res : { ok: false, error: res && res.error, data: {} };
+  },
+  getCurrent: async () => {
+    const res = await ipcRenderer.invoke('get-current-locale');
+    return res && res.ok ? res.locale : null;
+  },
+  setCurrent: async (lang) => {
+    const res = await ipcRenderer.invoke('set-current-locale', lang);
+    return res;
+  },
+  onUpdate: (cb) => {
+    const handler = (event, payload) => {
+      try { cb(payload); } catch (e) { console.error('i18n.onUpdate callback error', e); }
+    };
+    ipcRenderer.on('i18n:update', handler);
+    return () => { ipcRenderer.removeListener('i18n:update', handler); };
+  }
+});
+
+// Debug
+try { console.log('preload.js loaded — auth, profile, bridge & i18n exposed'); } catch (e) {}

@@ -1,26 +1,99 @@
-<!-- settings/settings.html -->
-<div class="view settings-view">
-  <h2>Настройки</h2>
-  <section class="theme-section">
-    <label for="themeColor">Тема приложения — основной цвет</label>
-    <input id="themeColor" type="color" />
-    <button id="saveThemeBtn" class="btn-primary">Сохранить тему</button>
-  </section>
-
-  <section class="password-section">
-    <h3>Изменить пароль</h3>
-    <input id="oldPassword" type="password" placeholder="Старый пароль" />
-    <input id="newPassword" type="password" placeholder="Новый пароль" />
-    <button id="changePasswordBtn" class="btn-primary">Изменить пароль</button>
-    <div id="changePasswordResult" class="result"></div>
-  </section>
-
-  <section class="delete-section">
-    <h3>Удалить аккаунт</h3>
-    <p>Это действие необратимо. Будут удалены все ваши данные на сервере.</p>
-    <input id="confirmDelete" type="checkbox" /> <label for="confirmDelete">Я понимаю и хочу удалить аккаунт</label><br/>
-    <button id="deleteAccountBtn" class="btn-danger">Удалить аккаунт</button>
-    <div id="deleteAccountResult" class="result"></div>
-  </section>
+<!DOCTYPE html>
+  <html lang="ru"></html>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="../../../../attribute_ripple/attribute-ripple.css" />
   <script src="./renderer.js" defer></script>
-</div>
+</head>
+<body>
+  <div class="app-grid">
+
+    <header class="site-header" role="banner">
+      <div class="brand">
+        <div class="title">
+          <h1>Настройки</h1>
+          <p class="subtitle">Профиль · Тема · Безопасность</p>
+        </div>
+      </div>
+    </header>
+
+    <aside class="sidebar" role="complementary">
+      <div class="card profile-card">
+        <div class="profile-top">
+          <img class="avatar" id="profileImg" src="../../../../img/asideBar/profile.jpg" alt="profileImg" />
+          <div class="profile-info">
+            <div class="name">@username</div>
+            <div class="email">example@artifact.com</div>
+          </div>
+        </div>
+
+        <div class="profile-controls">
+          <label for="uploadPhoto" class="btn-secondary" data-ripple>Выбрать фото...</label>
+          <input id="uploadPhoto" type="file" accept="image/*" style="display:none;" />
+          <button data-ripple id="removePhoto" class="btn-outline">Удалить фотографию</button>
+        </div>
+
+        <div class="theme-quick">
+          <label for="accentColor">Акцентный цвет</label>
+          <input id="accentColor" type="color" value="#0070c9" />
+          <button data-ripple id="applyAccent" class="btn-primary">Применить</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main" role="main">
+      <div class="main-grid">
+
+        <section class="card theme-card" aria-labelledby="themeHeading">
+          <h2 id="themeHeading">Тема приложения</h2>
+          <p class="muted">Выберите основной цвет и сохраните тему интерфейса.</p>
+
+          <div class="field-row">
+            <label for="themeColor">Основной цвет</label>
+            <input id="themeColor" type="color" value="#0070c9" />
+            <button data-ripple id="saveThemeBtn" class="btn-primary">Сохранить тему</button>
+          </div>
+        </section>
+
+        <section class="card password-card" aria-labelledby="passwordHeading">
+          <h2 id="passwordHeading">Изменить пароль</h2>
+          <p class="muted">Регулярная смена пароля повышает безопасность аккаунта.</p>
+
+          <div class="form-grid">
+            <div class="field">
+              <label for="oldPassword">Старый пароль</label>
+              <input id="oldPassword" type="password" placeholder="Введите текущий пароль" />
+            </div>
+            <div class="field">
+              <label for="newPassword">Новый пароль</label>
+              <input id="newPassword" type="password" placeholder="Новый пароль" />
+            </div>
+            <div class="actions-row">
+              <button data-ripple id="changePasswordBtn" class="btn-primary">Изменить пароль</button>
+              <div id="changePasswordResult" class="result" aria-live="polite"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card privacy-card" aria-labelledby="deleteHeading">
+          <h2 id="deleteHeading">Удаление аккаунта</h2>
+          <p class="muted">Это действие необратимо — все данные будут удалены с сервера.</p>
+
+          <div class="delete-block">
+            <label class="confirm">
+              <input id="confirmDelete" type="checkbox" />
+              <span>Я понимаю и хочу удалить аккаунт</span>
+            </label>
+
+            <div class="danger-row">
+              <button data-ripple id="deleteAccountBtn" class="btn-danger">Удалить аккаунт</button>
+              <div id="deleteAccountResult" class="result" aria-live="polite"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script src="../../../../attribute_ripple/attribute-ripple.js"></script>
+</body>
+</html>
