@@ -10,7 +10,7 @@
   const finalDelayMs = 5;
   const SEQUENCE_WINDOW_MS = 1000;
 
-  const QWERTY_ORDER = "QWERTYUIOPASDFGHJKL;ZXCVBNM";
+  const QWERTY_ORDER = "QAWSEDRFVBTGNMYHUJIKOLP;";
 
   const qwertyToSteno = {
     'Q': 'S', 'W': 'T', 'E': 'P', 'R': 'H', 'T': '*', 'Y': 'F', 'U': 'P', 'I': 'L', 'O': 'T', 'P': 'D',

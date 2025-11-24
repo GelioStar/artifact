@@ -279,4 +279,3 @@ async function updateUIText() {
   //   welcomeElement.textContent = await window.electronAPI.translate('otherUiText.welcome');
   // }
 }
-
