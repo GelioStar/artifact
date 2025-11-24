@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Generator, Optional, Dict, Any
 
-from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Header, Response, status
+from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Header, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -17,10 +17,8 @@ from contextlib import asynccontextmanager
 BASE_DIR = os.path.dirname(__file__)
 DB_PATH = os.path.join(BASE_DIR, "app.db")
 
-# Use pbkdf2_sha256 (no external C deps)
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
-# --- DB helpers ---
 def ensure_db_file():
     if not os.path.exists(DB_PATH):
         open(DB_PATH, "a").close()
@@ -85,7 +83,6 @@ def get_db() -> Generator[sqlite3.Connection, None, None]:
     finally:
         conn.close()
 
-# --- Lifespan (startup) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Startup: ensure DB file and tables exist...")
@@ -96,7 +93,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Auth server (SQLite, retries for locked DB)", lifespan=lifespan)
 
-# CORS for Electron client
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -104,7 +100,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Generic exception handler -> always return JSON
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
     import traceback
@@ -112,7 +107,6 @@ async def generic_exception_handler(request: Request, exc: Exception):
     print("Unhandled exception:\n", tb)
     return JSONResponse(status_code=500, content={"success": False, "error": "internal server error"})
 
-# --- Request models ---
 class RegisterRequest(BaseModel):
     username: str
     password: str
@@ -122,7 +116,6 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
-# --- Helpers ---
 def make_user_dict(row: sqlite3.Row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -191,7 +184,6 @@ def get_user_row_from_token(token: str, db: sqlite3.Connection) -> Optional[sqli
     u = cur.execute("SELECT id, username, email, created_at FROM users WHERE id = ?", (s["user_id"],)).fetchone()
     return u
 
-# --- Endpoints ---
 @app.post("/api/register")
 def register(payload: RegisterRequest, db: sqlite3.Connection = Depends(get_db)):
     username = (payload.username or "").strip()
@@ -290,15 +282,10 @@ def login(payload: LoginRequest, db: sqlite3.Connection = Depends(get_db)):
             continue
     return {"success": False, "error": "could not create session (db busy)"}
 
-# ---------- FIXED: GET /api/user now accepts Authorization header OR ?token=... ----------
 @app.get("/api/user")
 def get_user(authorization: Optional[str] = Header(None), token: Optional[str] = None, db: sqlite3.Connection = Depends(get_db)):
-    """
-    Accept token either as Authorization: Bearer <token> header or as ?token=... query param.
-    """
     token_val = extract_token(authorization, token)
     if not token_val:
-        # consistent with other endpoints — use 401 for missing auth
         raise HTTPException(status_code=401, detail={"success": False, "error": "token required"})
     user_row = get_user_row_from_token(token_val, db)
     if not user_row:
@@ -322,7 +309,6 @@ def logout(payload: Dict[str, Any], db: sqlite3.Connection = Depends(get_db)):
         print("OperationalError on logout:", e)
         return {"success": False, "error": "database locked, try again"}
 
-# --- Endpoints for icons (unchanged except they already accepted header) ---
 @app.post("/api/user/icon")
 async def upload_user_icon(
     request: Request,

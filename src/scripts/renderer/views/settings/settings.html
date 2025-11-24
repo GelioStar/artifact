@@ -1,52 +1,97 @@
-<!doctype html>
-<html lang="ru">
-<head>
-  <meta charset="utf-8" />
+<!DOCTYPE html>
+  <html lang="ru"></html>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Настройки — профиль</title>
-  <style>
-    :root {
-      --primary-color: #0070c9;
-    }
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin: 20px; color:#111; }
-    .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; max-width:420px; }
-    .profile-top { display:flex; gap:12px; align-items:center; }
-    .avatar { width:96px; height:96px; border-radius:50%; object-fit:cover; background:#f3f4f6; }
-    .profile-info { display:flex; flex-direction:column; gap:4px; }
-    .btn { padding:8px 12px; border-radius:8px; border:none; cursor:pointer; }
-    .btn-primary { background:var(--primary-color); color:white; }
-    .btn-outline { background:white; border:1px solid #cbd5e1; }
-    .controls { margin-top:12px; display:flex; gap:8px; align-items:center; }
-    .muted { color:#6b7280; font-size:0.9rem; }
-    .loading { opacity:0.6; filter:blur(1px); }
-    .message { margin-top:8px; min-height:20px; font-size:0.9rem; }
-    input[type="file"] { display:none; }
-  </style>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="../../../../attribute_ripple/attribute-ripple.css" />
+  <script src="./renderer.js" defer></script>
 </head>
 <body>
-  <div class="card">
-    <h2>Профиль</h2>
-    <div class="profile-top" aria-live="polite">
-      <!-- дефолтная картинка в ресурсах приложения -->
-      <img id="profileImg" class="avatar" src="../../../../img/asideBar/profile.jpg" alt="Аватар пользователя" />
-      <div class="profile-info">
-        <div id="profileName"><strong>@username</strong></div>
-        <div id="profileEmail" class="muted">example@artifact.com</div>
-        <div id="profileJoined" class="muted"></div>
+  <div class="app-grid">
+
+    <header class="site-header" role="banner">
+      <div class="brand">
+        <div class="title">
+          <h1>Настройки</h1>
+          <p class="subtitle">Профиль · Тема · Безопасность</p>
+        </div>
       </div>
-    </div>
+    </header>
 
-    <div class="controls">
-      <label for="uploadPhoto" class="btn btn-outline" role="button">Выбрать фото...</label>
-      <input id="uploadPhoto" type="file" accept="image/*" />
-      <button id="uploadBtn" class="btn btn-primary" disabled>Загрузить</button>
-      <button id="removePhoto" class="btn btn-outline">Удалить</button>
-    </div>
+    <aside class="sidebar" role="complementary">
+      <div class="card profile-card">
+        <div class="profile-top">
+          <img class="avatar" id="profileImg" src="../../../../img/asideBar/profile.jpg" alt="profileImg" />
+          <div class="profile-info">
+            <div class="name">@username</div>
+            <div class="email">example@artifact.com</div>
+          </div>
+        </div>
 
-    <div id="previewInfo" class="muted" style="margin-top:8px;">Максимум 2 MB. Поддерживается JPEG/PNG/GIF.</div>
-    <div id="message" class="message" aria-live="polite"></div>
+        <div class="profile-controls">
+          <label for="uploadPhoto" class="btn-secondary" style="display:inline-block; padding:8px 10px; border-radius:8px;resize: none;" data-ripple>Выбрать фото...</label>
+          <input id="uploadPhoto" type="file" accept="image/*" style="display:none;" />
+          <button data-ripple id="removePhoto" class="btn-outline">Удалить фотографию</button>
+        </div>
+
+        <div class="theme-quick">
+          <button data-ripple id="exitAccount" class="btn-primary">Выйти из аккаунта</button>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main" role="main">
+      <div class="main-grid">
+
+        <section class="card theme-card" aria-labelledby="themeHeading">
+          <h2 id="themeHeading">Тема приложения</h2>
+          <p class="muted">Выберите основной цвет и сохраните тему интерфейса.</p>
+
+          <div class="field-row">
+            <label for="themeColor">Основной цвет</label>
+            <input id="themeColor" type="color" value="#0070c9" />
+            <button data-ripple id="saveThemeBtn" class="btn-primary">Сохранить тему</button>
+          </div>
+        </section>
+
+        <section class="card password-card" aria-labelledby="passwordHeading">
+          <h2 id="passwordHeading">Изменить пароль</h2>
+          <p class="muted">Регулярная смена пароля повышает безопасность аккаунта.</p>
+
+          <div class="form-grid">
+            <div class="field">
+              <label for="oldPassword">Старый пароль</label>
+              <input id="oldPassword" type="password" placeholder="Введите текущий пароль" />
+            </div>
+            <div class="field">
+              <label for="newPassword">Новый пароль</label>
+              <input id="newPassword" type="password" placeholder="Новый пароль" />
+            </div>
+            <div class="actions-row">
+              <button data-ripple id="changePasswordBtn" class="btn-primary">Изменить пароль</button>
+              <div id="changePasswordResult" class="result" aria-live="polite"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card privacy-card" aria-labelledby="deleteHeading">
+          <h2 id="deleteHeading">Удаление аккаунта</h2>
+          <p class="muted">Это действие необратимо — все данные будут удалены с сервера.</p>
+
+          <div class="delete-block">
+            <label class="confirm">
+              <input id="confirmDelete" type="checkbox" />
+              <span>Я понимаю и хочу удалить аккаунт</span>
+            </label>
+
+            <div class="danger-row">
+              <button data-ripple id="deleteAccountBtn" class="btn-danger">Удалить аккаунт</button>
+              <div id="deleteAccountResult" class="result" aria-live="polite"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
   </div>
-
-  <script src="./renderer.js" defer></script>
+  <script src="../../../../attribute_ripple/attribute-ripple.js"></script>
 </body>
 </html>

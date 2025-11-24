@@ -213,3 +213,119 @@ webview.addEventListener('dom-ready', () => {
     img.src = defaultSrc;
   }
 })();
+
+// renderer.js (main window) — обновлён
+document.addEventListener('DOMContentLoaded', () => {
+  const guest = document.getElementById('guest'); // <webview id="guest">
+  if (!guest) {
+    console.error('webview #guest not found');
+    return;
+  }
+
+  // ... оставляем ваш существующий код для webview/navigation/i18n (не меняем) ...
+  // (Вставьте здесь ваш прежний код делегирования кликов, i18n и т.д.)
+});
+
+// --- Avatar loading logic (new) ---
+(async function initAvatarInSidebar() {
+  const img = document.getElementById('profileImg');
+  if (!img) return;
+  const DEFAULT_SRC = img.getAttribute('src') || 'img/asideBar/profile.jpg';
+
+  function setSrc(src) {
+    if (!src) {
+      img.onerror = null;
+      img.src = DEFAULT_SRC;
+      return;
+    }
+    img.onerror = () => { img.onerror = null; img.src = DEFAULT_SRC; };
+    img.src = src;
+  }
+
+  // Get token (prefer main session)
+  async function getToken() {
+    try {
+      if (window.session && typeof window.session.get === 'function') {
+        const s = await window.session.get();
+        if (s && s.ok !== false && s.token) return s.token;
+      }
+    } catch (e) { /* ignore */ }
+    return localStorage.getItem('sessionToken') || null;
+  }
+
+  // Load avatar from cache/server using avatar API
+  async function loadAvatar() {
+    let userId = (window.currentUser && window.currentUser.id) || null;
+    if (!userId) {
+      // try to recover user via getUser if token exists
+      const token = await getToken();
+      if (token && window.auth && typeof window.auth.getUser === 'function') {
+        try {
+          const ru = await window.auth.getUser(token);
+          if (ru && ru.success && ru.user && ru.user.id) {
+            userId = ru.user.id;
+            window.currentUser = ru.user;
+          }
+        } catch (e) { /* ignore */ }
+      }
+    }
+    if (!userId) {
+      setSrc(DEFAULT_SRC);
+      return;
+    }
+
+    try {
+      const res = await window.avatar.get(userId);
+      if (res && res.ok && res.dataUrl) {
+        setSrc(res.dataUrl);
+      } else if (res && res.notFound) {
+        setSrc(DEFAULT_SRC);
+      } else if (res && res.dataUrl) {
+        // sometimes get returns ok=false but has dataUrl
+        setSrc(res.dataUrl);
+      } else {
+        // fallback to default public URL with cache-buster (but prefer avoiding server hits)
+        // avoid fetching raw binary here; prefer not to hit server often
+        const token = await getToken();
+        const publicUrl = (window.profile && window.profile.getIconUrl)
+          ? window.profile.getIconUrl(userId, token)
+          : `/api/user/icon/${encodeURIComponent(userId)}` + (token ? `?token=${encodeURIComponent(token)}` : '');
+        setSrc(publicUrl);
+      }
+    } catch (e) {
+      console.error('avatar.load error', e);
+      setSrc(DEFAULT_SRC);
+    }
+  }
+
+  // Load initially
+  loadAvatar();
+
+  // Subscribe to avatar changes from main process (broadcast when cache updated or cleared)
+  if (window.avatar && typeof window.avatar.onChanged === 'function') {
+    window.avatar.onChanged((payload) => {
+      try {
+        if (!payload) return;
+        // payload: { userId, dataUrl, deleted }
+        // If dataUrl present -> set new src; if deleted -> default; otherwise ignore
+        if (payload.dataUrl) {
+          setSrc(payload.dataUrl);
+        } else if (payload.deleted) {
+          setSrc(DEFAULT_SRC);
+        }
+      } catch (e) { console.error('avatar.onChanged handler error', e); }
+    });
+  }
+
+  // Optional: expose a function to force refresh from UI (developer usage)
+  window.forceAvatarRefresh = async function() {
+    try {
+      const userId = window.currentUser && window.currentUser.id;
+      if (!userId) return { ok: false, error: 'no user' };
+      const token = await getToken();
+      return await window.avatar.forceRefresh(userId, token);
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
+  };
+})();

@@ -1,3 +1,4 @@
+// auth renderer.js (окно авторизации)
 (function(){
   const $ = (id)=>document.getElementById(id);
   const registerCard = $('registerCard');
@@ -43,13 +44,14 @@
     try {
       const res = await window.auth.register({ username, email, password });
       if(res.success){
+        // сохраняем токен в localStorage (удобно для восстановления), а также в main SessionStore via bridge
         localStorage.setItem('sessionToken', res.token);
         showMsg(regMsg, 'Поздравляем! Добро пожаловать!', true);
         showProfile(res.user);
         if (window.bridge && typeof window.bridge.authenticated === 'function') {
-          window.bridge.authenticated(res.token);
+          // передаём объект { token, user } — main сохранит в SessionStore
+          await window.bridge.authenticated({ token: res.token, user: res.user });
         }
-        // УБРАН вызов window.profile.upload(...) — некорректный вызов: uploadIcon требует File/Blob.
       } else {
         showMsg(regMsg, res.error || 'Регистрация отклонена.', false);
       }
@@ -72,7 +74,7 @@
         showMsg(logMsg, 'Поздравляем! Добро пожаловать!', true);
         showProfile(res.user);
         if (window.bridge && typeof window.bridge.authenticated === 'function') {
-          window.bridge.authenticated(res.token);
+          await window.bridge.authenticated({ token: res.token, user: res.user });
         }
       } else {
         showMsg(logMsg, res.error || 'Вход отклонен.', false);
@@ -85,13 +87,15 @@
 
   logoutBtn.addEventListener('click', async ()=>{
     const token = localStorage.getItem('sessionToken');
-    await window.auth.logout(token);
+    try {
+      await window.auth.logout(token);
+    } catch (e) { /* ignore errors */ }
     localStorage.removeItem('sessionToken');
     profileCard.style.display = 'none';
     loginCard.style.display = 'block';
     showMsg(regMsg, 'Logged out', true);
     if (window.bridge && typeof window.bridge.logoutNotify === 'function') {
-      window.bridge.logoutNotify();
+      await window.bridge.logoutNotify();
     }
   });
 
@@ -102,9 +106,9 @@
       const res = await window.auth.getUser(token);
       if(res.success && res.user){
         showProfile(res.user);
-        // При восстановлении передаём в main process сам токен из localStorage
+        // При восстановлении передаём в main process сам токен и user
         if (window.bridge && typeof window.bridge.authenticated === 'function') {
-          window.bridge.authenticated(token);
+          await window.bridge.authenticated({ token, user: res.user });
         }
       } else {
         localStorage.removeItem('sessionToken');

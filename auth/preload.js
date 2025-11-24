@@ -1,6 +1,5 @@
-// preload.js — для renderer (auth + main). Экспортирует window.auth, window.profile, window.bridge, window.i18n
+// preload.js
 const { contextBridge, ipcRenderer } = require('electron');
-
 const API_BASE = process.env.AUTH_SERVER_URL || 'http://localhost:8000/api';
 
 function handleFetch(res) {
@@ -9,9 +8,7 @@ function handleFetch(res) {
 
 function fetchWithAuth(url, opts = {}, token) {
   const headers = opts.headers ? {...opts.headers} : {};
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
-  }
+  if (token) headers['Authorization'] = `Bearer ${token}`;
   return fetch(url, {...opts, headers});
 }
 
@@ -22,21 +19,17 @@ contextBridge.exposeInMainWorld('auth', {
     });
     return handleFetch(res);
   },
-
   login: async (data) => {
     const res = await fetch(`${API_BASE}/login`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
     });
     return handleFetch(res);
   },
-
-  // getUser поддерживает передачу токена в заголовке Authorization (предпочтительно)
   getUser: async (token) => {
     const url = `${API_BASE}/user`;
     const res = await fetchWithAuth(url, { method: 'GET' }, token);
     return handleFetch(res);
   },
-
   logout: async (token) => {
     const res = await fetch(`${API_BASE}/logout`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token })
@@ -79,12 +72,8 @@ contextBridge.exposeInMainWorld('profile', {
     try {
       const res = await fetchWithAuth(`${API_BASE}/user/icon/${encodeURIComponent(userId)}`, { method: 'GET' }, token);
       if (!res.ok) {
-        try {
-          const j = await res.json();
-          return { success: false, status: res.status, error: j && j.error ? j.error : 'failed to fetch icon' };
-        } catch (e) {
-          return { success: false, status: res.status, error: 'failed to fetch icon' };
-        }
+        try { const j = await res.json(); return { success: false, status: res.status, error: j && j.error ? j.error : 'failed to fetch icon' }; }
+        catch (e) { return { success: false, status: res.status, error: 'failed to fetch icon' }; }
       }
       const blob = await res.blob();
       const dataUrl = await new Promise((resolve, reject) => {
@@ -105,12 +94,8 @@ contextBridge.exposeInMainWorld('profile', {
     try {
       const res = await fetchWithAuth(`${API_BASE}/user/icon/${encodeURIComponent(userId)}`, { method: 'GET' }, token);
       if (!res.ok) {
-        try {
-          const j = await res.json();
-          return { success: false, status: res.status, error: j && j.error ? j.error : 'failed to fetch icon' };
-        } catch (e) {
-          return { success: false, status: res.status, error: 'failed to fetch icon' };
-        }
+        try { const j = await res.json(); return { success: false, status: res.status, error: j && j.error ? j.error : 'failed to fetch icon' }; }
+        catch (e) { return { success: false, status: res.status, error: 'failed to fetch icon' }; }
       }
       const blob = await res.blob();
       return { success: true, blob };
@@ -120,40 +105,52 @@ contextBridge.exposeInMainWorld('profile', {
   }
 });
 
+// Bridge helper for notifying main process
 contextBridge.exposeInMainWorld('bridge', {
-  authenticated: (token) => {
-    try { ipcRenderer.send('auth:authenticated', token); } catch (e) { console.error(e); }
+  authenticated: async (payload) => {
+    try {
+      // payload can be token string OR { token, user }
+      let token = null, user = null;
+      if (!payload) return;
+      if (typeof payload === 'string') token = payload;
+      else if (typeof payload === 'object') { token = payload.token; user = payload.user; }
+      // Save into main process SessionStore
+      await ipcRenderer.invoke('session:set', token, user).catch(()=>{});
+      // Also send legacy event for compatibility
+      ipcRenderer.send('auth:authenticated', payload);
+    } catch (e) { console.error(e); }
   },
-  logoutNotify: () => {
-    try { ipcRenderer.send('auth:logout'); } catch (e) { console.error(e); }
-  },
-});
-
-contextBridge.exposeInMainWorld('i18n', {
-  available: async () => {
-    const res = await ipcRenderer.invoke('available-locales');
-    return res && res.ok ? res.locales : [];
-  },
-  load: async (lang) => {
-    const res = await ipcRenderer.invoke('load-locale', lang);
-    return res && res.ok ? res : { ok: false, error: res && res.error, data: {} };
-  },
-  getCurrent: async () => {
-    const res = await ipcRenderer.invoke('get-current-locale');
-    return res && res.ok ? res.locale : null;
-  },
-  setCurrent: async (lang) => {
-    const res = await ipcRenderer.invoke('set-current-locale', lang);
-    return res;
-  },
-  onUpdate: (cb) => {
-    const handler = (event, payload) => {
-      try { cb(payload); } catch (e) { console.error('i18n.onUpdate callback error', e); }
-    };
-    ipcRenderer.on('i18n:update', handler);
-    return () => { ipcRenderer.removeListener('i18n:update', handler); };
+  logoutNotify: async () => {
+    try {
+      await ipcRenderer.invoke('session:clear').catch(()=>{});
+      ipcRenderer.send('auth:logout');
+    } catch (e) { console.error(e); }
   }
 });
 
-// Debug
-try { console.log('preload.js loaded — auth, profile, bridge & i18n exposed'); } catch (e) {}
+// session API to let renderer obtain current main-session token/user
+contextBridge.exposeInMainWorld('session', {
+  get: async () => {
+    try {
+      const res = await ipcRenderer.invoke('session:get');
+      if (res && res.ok !== false) return res;
+      return { ok: false, error: res && res.error ? res.error : 'unknown' };
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
+  },
+  set: async (token, user) => {
+    try {
+      return await ipcRenderer.invoke('session:set', token, user);
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
+  },
+  clear: async () => {
+    try {
+      return await ipcRenderer.invoke('session:clear');
+    } catch (e) {
+      return { ok: false, error: String(e) };
+    }
+  }
+});
