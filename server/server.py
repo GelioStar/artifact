@@ -17,8 +17,10 @@ from contextlib import asynccontextmanager
 BASE_DIR = os.path.dirname(__file__)
 DB_PATH = os.path.join(BASE_DIR, "app.db")
 
+# Password hashing
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
+# ---------------- DB helpers (как у вас, без изменений) ----------------
 def ensure_db_file():
     if not os.path.exists(DB_PATH):
         open(DB_PATH, "a").close()
@@ -93,6 +95,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Auth server (SQLite, retries for locked DB)", lifespan=lifespan)
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -100,6 +103,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Generic exception handler -> JSON
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
     import traceback
@@ -107,6 +111,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
     print("Unhandled exception:\n", tb)
     return JSONResponse(status_code=500, content={"success": False, "error": "internal server error"})
 
+# Request models
 class RegisterRequest(BaseModel):
     username: str
     password: str
@@ -116,6 +121,7 @@ class LoginRequest(BaseModel):
     username: str
     password: str
 
+# Helpers
 def make_user_dict(row: sqlite3.Row) -> Dict[str, Any]:
     return {
         "id": row["id"],
@@ -184,6 +190,8 @@ def get_user_row_from_token(token: str, db: sqlite3.Connection) -> Optional[sqli
     u = cur.execute("SELECT id, username, email, created_at FROM users WHERE id = ?", (s["user_id"],)).fetchone()
     return u
 
+# ---------------- Existing endpoints (register/login/get_user/logout/icon) ----------------
+# (оставляю ваш код без изменений, кроме небольших правок для унификации ответов)
 @app.post("/api/register")
 def register(payload: RegisterRequest, db: sqlite3.Connection = Depends(get_db)):
     username = (payload.username or "").strip()
@@ -396,6 +404,99 @@ def get_user_icon(user_id: int, db: sqlite3.Connection = Depends(get_db)):
         print("Error in get_user_icon:", e)
         return JSONResponse(status_code=500, content={"success": False, "error": "internal error"})
 
+# ---------------- New endpoint: change password ----------------
+@app.post("/api/change_password")
+def change_password(payload: Dict[str, str], authorization: Optional[str] = Header(None), token: Optional[str] = None, db: sqlite3.Connection = Depends(get_db)):
+    """
+    payload: { old_password: str, new_password: str }
+    Token must be provided via Authorization header or ?token=...
+    On success: updates hashed_password and deletes all sessions for user except current token.
+    """
+    token_val = extract_token(authorization, token)
+    if not token_val:
+        raise HTTPException(status_code=401, detail={"success": False, "error": "token required"})
+    if not payload or 'old_password' not in payload or 'new_password' not in payload:
+        raise HTTPException(status_code=400, detail={"success": False, "error": "old_password and new_password required"})
+
+    old = payload.get('old_password') or ''
+    new = payload.get('new_password') or ''
+    if len(new) < 6:
+        return {"success": False, "error": "new password too short (min 6 chars)"}
+    cur = db.cursor()
+    # find session -> user
+    s = cur.execute("SELECT token, user_id FROM sessions WHERE token = ?", (token_val,)).fetchone()
+    if not s:
+        return {"success": False, "error": "invalid or expired token"}
+    user_id = s["user_id"]
+    row = cur.execute("SELECT id, hashed_password FROM users WHERE id = ?", (user_id,)).fetchone()
+    if not row:
+        return {"success": False, "error": "user not found"}
+    if not verify_password(old, row["hashed_password"]):
+        return {"success": False, "error": "incorrect password"}
+
+    try:
+        new_hashed = hash_password(new)
+    except Exception:
+        return {"success": False, "error": "could not hash new password"}
+
+    try:
+        def do_change():
+            cur.execute("UPDATE users SET hashed_password = ? WHERE id = ?", (new_hashed, user_id))
+            # remove all sessions for this user except the current one
+            cur.execute("DELETE FROM sessions WHERE user_id = ? AND token != ?", (user_id, token_val))
+            db.commit()
+            return True
+        execute_with_retry(do_change, retries=6, backoff=0.05)
+        return {"success": True, "message": "password changed"}
+    except sqlite3.OperationalError as e:
+        print("OperationalError on change_password:", e)
+        return {"success": False, "error": "database locked, try again"}
+    except Exception as e:
+        print("Error in change_password:", e)
+        return {"success": False, "error": "internal error"}
+
+# ---------------- New endpoint: delete account ----------------
+@app.post("/api/delete_account")
+def delete_account(payload: Optional[Dict[str, str]] = None, authorization: Optional[str] = Header(None), token: Optional[str] = None, db: sqlite3.Connection = Depends(get_db)):
+    """
+    Удаление аккаунта:
+      - токен обязателен (Authorization: Bearer <token> или ?token=...)
+      - payload может содержать 'password' для дополнительной проверки (опционально)
+    Удаляются: все сессии пользователя и запись в users.
+    """
+    token_val = extract_token(authorization, token)
+    if not token_val:
+        raise HTTPException(status_code=401, detail={"success": False, "error": "token required"})
+    cur = db.cursor()
+    s = cur.execute("SELECT token, user_id FROM sessions WHERE token = ?", (token_val,)).fetchone()
+    if not s:
+        return {"success": False, "error": "invalid or expired token"}
+    user_id = s["user_id"]
+    # if password provided — verify
+    if payload and 'password' in payload and payload['password'] is not None:
+        p = payload['password']
+        row = cur.execute("SELECT hashed_password FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not row or not verify_password(p, row["hashed_password"]):
+            return {"success": False, "error": "incorrect password"}
+
+    try:
+        def do_delete():
+            # delete sessions for this user
+            cur.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            # delete user (icon blob will be removed as part of row deletion)
+            cur.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            db.commit()
+            return True
+        execute_with_retry(do_delete, retries=6, backoff=0.05)
+        return {"success": True, "message": "account deleted"}
+    except sqlite3.OperationalError as e:
+        print("OperationalError on delete_account:", e)
+        return {"success": False, "error": "database locked, try again"}
+    except Exception as e:
+        print("Error in delete_account:", e)
+        return {"success": False, "error": "internal error"}
+
+# Run server
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="127.0.0.1", port=8000, log_level="info", reload=False)

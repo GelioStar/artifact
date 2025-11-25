@@ -49,6 +49,29 @@ contextBridge.exposeInMainWorld('auth', {
     });
     return handleFetch(res);
   },
+
+  // ---- NEW: change password ----
+  // changePassword(oldPassword, newPassword, token) -> returns parsed JSON
+  changePassword: async (oldPassword, newPassword, token) => {
+    const res = await fetchWithAuth(`${API_BASE}/change_password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ old_password: oldPassword, new_password: newPassword })
+    }, token);
+    return handleFetch(res);
+  },
+
+  // ---- NEW: delete account ----
+  // deleteAccount(passwordOrNull, token) -> returns parsed JSON
+  deleteAccount: async (password, token) => {
+    const body = password ? { password } : {};
+    const res = await fetchWithAuth(`${API_BASE}/delete_account`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }, token);
+    return handleFetch(res);
+  }
 });
 
 contextBridge.exposeInMainWorld('profile', {
@@ -118,7 +141,7 @@ contextBridge.exposeInMainWorld('profile', {
   }
 });
 
-// Bridge + session helpers
+// Bridge + session helpers unchanged (you already had them)
 contextBridge.exposeInMainWorld('bridge', {
   authenticated: async (payload) => {
     try {

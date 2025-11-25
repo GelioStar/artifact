@@ -1,6 +1,4 @@
 // settings/renderer.js — обновлён, интеграция с main avatar cache (avatar.forceRefresh / avatar.clear)
-// Предположения: в preload.js выставлены window.profile, window.session и window.avatar (описаны ранее).
-
 const $ = id => document.getElementById(id);
 
 const uploadPhoto = $('uploadPhoto');
@@ -23,68 +21,16 @@ async function saveTheme(color) {
     }
   } catch (e) { console.warn('IPC not available to persist settings:', e); }
   try {
+    const token = await getAuthToken();
     await fetch('/api/settings/theme', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
+      headers: {'Content-Type':'application/json', ...(token ? {'Authorization': `Bearer ${token}`} : {})},
       body: JSON.stringify({theme_color: color})
     });
   } catch (e) { /* ignore network errors */ }
 }
 
-async function initSettingsView() {
-  // Theme UI
-  const colorInput = $('themeColor');
-  const saveBtn = $('saveThemeBtn');
-  const stored = localStorage.getItem('app-theme-color') || getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim() || '#3b82f6';
-  colorInput.value = stored;
-  await applyTheme(stored);
-  saveBtn.addEventListener('click', async () => {
-    const color = colorInput.value;
-    await saveTheme(color);
-    alert('Тема сохранена.');
-  });
-
-  // change password (existing)
-  $('changePasswordBtn').addEventListener('click', async () => {
-    const oldP = $('oldPassword').value;
-    const newP = $('newPassword').value;
-    const resEl = $('changePasswordResult'); resEl.textContent = '';
-    try {
-      const r = await fetch('/api/change_password', {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ old_password: oldP, new_password: newP })
-      });
-      const j = await r.json();
-      resEl.textContent = r.ok ? (j.message || 'Пароль изменён.') : (j.error || 'Ошибка при изменении пароля.');
-    } catch (e) {
-      resEl.textContent = 'Не удалось связаться с сервером.';
-    }
-  });
-
-  // delete account (existing)
-  $('deleteAccountBtn').addEventListener('click', async () => {
-    const confirm = $('confirmDelete').checked;
-    const resEl = $('deleteAccountResult'); resEl.textContent = '';
-    if (!confirm) { resEl.textContent = 'Подтвердите удаление.'; return; }
-    try {
-      const r = await fetch('/api/delete_account', { method: 'POST' });
-      const j = await r.json();
-      resEl.textContent = r.ok ? (j.message || 'Аккаунт удалён.') : (j.error || 'Ошибка при удалении аккаунта.');
-    } catch (e) {
-      resEl.textContent = 'Не удалось связаться с сервером.';
-    }
-  });
-
-  // upload/remove handlers wired below
-}
-
-// -------------------- AVATAR helpers --------------------
-
-const DEFAULT_AVATAR = '../../../../img/asideBar/profile.jpg';
-const PROFILE_IMG_ID = 'profileImg';
-
-// Получаем токен: сначала main session (безопаснее), затем localStorage
+// -------------------- helper: token retrieval --------------------
 async function getAuthToken() {
   try {
     if (window.session && typeof window.session.get === 'function') {
@@ -97,7 +43,88 @@ async function getAuthToken() {
   return localStorage.getItem('sessionToken') || null;
 }
 
-// Установить src для локального <img> с защитой onerror
+// -------------------- Change password handler --------------------
+async function handleChangePassword() {
+  const oldP = $('oldPassword').value;
+  const newP = $('newPassword').value;
+  const resEl = $('changePasswordResult'); resEl.textContent = '';
+  if (!oldP || !newP) { resEl.textContent = 'Заполните оба поля.'; return; }
+  const token = await getAuthToken();
+
+  try {
+    let result = null;
+    // Prefer preload helper
+    if (window.auth && typeof window.auth.changePassword === 'function') {
+      result = await window.auth.changePassword(oldP, newP, token);
+    } else {
+      // fallback manual fetch
+      const resp = await fetch('/api/change_password', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json', ...(token ? {'Authorization': `Bearer ${token}`} : {})},
+        body: JSON.stringify({ old_password: oldP, new_password: newP })
+      });
+      result = await resp.json().catch(()=>({ success: resp.ok }));
+      if (resp.ok && result && result.success === undefined) result.success = true;
+    }
+
+    if (result && result.success) {
+      resEl.textContent = result.message || 'Пароль изменён.';
+      // Optionally: inform user to re-login or keep current session (we kept current session alive)
+    } else {
+      resEl.textContent = result && result.error ? result.error : 'Ошибка при изменении пароля.';
+    }
+  } catch (e) {
+    console.error('change password error', e);
+    resEl.textContent = 'Не удалось связаться с сервером.';
+  }
+}
+
+// -------------------- Delete account handler --------------------
+async function handleDeleteAccount() {
+  const confirmed = $('confirmDelete').checked;
+  const resEl = $('deleteAccountResult'); resEl.textContent = '';
+  if (!confirmed) { resEl.textContent = 'Подтвердите удаление.'; return; }
+
+  // Optionally, ask for password confirmation in UI — currently optional
+  const passwordInput = $('deletePassword'); // if you add it to DOM, retrieve it; otherwise undefined
+  const pw = passwordInput ? passwordInput.value : null;
+
+  if (!confirm('Вы уверены, что хотите удалить аккаунт? Это действие необратимо.')) return;
+
+  const token = await getAuthToken();
+  try {
+    let result = null;
+    if (window.auth && typeof window.auth.deleteAccount === 'function') {
+      result = await window.auth.deleteAccount(pw, token);
+    } else {
+      const resp = await fetch('/api/delete_account', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json', ...(token ? {'Authorization': `Bearer ${token}`} : {})},
+        body: JSON.stringify(pw ? { password: pw } : {})
+      });
+      result = await resp.json().catch(()=>({ success: resp.ok }));
+      if (resp.ok && result && result.success === undefined) result.success = true;
+    }
+
+    if (result && result.success) {
+      resEl.textContent = result.message || 'Аккаунт удалён.';
+      // Clear client session and notify main to go to auth window
+      try { localStorage.removeItem('sessionToken'); } catch (e) {}
+      try { if (window.bridge && typeof window.bridge.logoutNotify === 'function') await window.bridge.logoutNotify(); } catch (e) {}
+      // Optionally reload app or navigate to login
+    } else {
+      resEl.textContent = result && result.error ? result.error : 'Ошибка при удалении аккаунта.';
+    }
+  } catch (e) {
+    console.error('delete account error', e);
+    resEl.textContent = 'Не удалось связаться с сервером.';
+  }
+}
+
+// -------------------- AVATAR helpers (оставляем ваши реализации) --------------------
+const DEFAULT_AVATAR = '../../../../img/asideBar/profile.jpg';
+const PROFILE_IMG_ID = 'profileImg';
+
 function setLocalAvatarSrc(src) {
   const img = document.getElementById(PROFILE_IMG_ID);
   if (!img) return;
@@ -110,54 +137,45 @@ function setLocalAvatarSrc(src) {
   img.src = src;
 }
 
-// Попытаться получить dataUrl от сервера (через helper preload) или публичный URL
 async function fetchAvatarDataUrl(userId, token) {
   if (!userId) return { ok: false, error: 'no-user' };
-  // Prefer preload helper which returns dataUrl
   if (window.profile && typeof window.profile.fetchIconDataUrl === 'function' && token) {
     try {
       const r = await window.profile.fetchIconDataUrl(userId, token);
-      return r; // { success: true, dataUrl } или { success:false, error:... }
+      return r;
     } catch (e) {
       return { success: false, error: String(e) };
     }
   }
-  // Fallback: try public URL (we will not fetch binary here often — main caching should handle frequent loads)
   try {
     const publicUrl = (window.profile && typeof window.profile.getIconUrl === 'function')
       ? window.profile.getIconUrl(userId, token)
       : `/api/user/icon/${encodeURIComponent(userId)}` + (token ? `?token=${encodeURIComponent(token)}` : '');
-    return { success: true, dataUrl: publicUrl }; // note: dataUrl may be an URL, not data:...
+    return { success: true, dataUrl: publicUrl };
   } catch (e) {
     return { success: false, error: String(e) };
   }
 }
 
-// -------------------- upload handler: показывает мгновенную превью, загружает, обновляет кеш main --------------------
 async function handleUpload(ev) {
   const file = ev.target.files && ev.target.files[0];
   if (!file) return;
   const img = document.getElementById(PROFILE_IMG_ID);
-  // validate
   if (!file.type.startsWith('image/')) { alert('Выберите изображение.'); ev.target.value = ''; return; }
   const MAX_BYTES = 2 * 1024 * 1024;
   if (file.size > MAX_BYTES) { alert('Файл слишком большой — максимум 2 МБ.'); ev.target.value = ''; return; }
 
-  // instant preview via object URL
   const previewUrl = URL.createObjectURL(file);
   setLocalAvatarSrc(previewUrl);
 
-  // upload via preload helper
   const token = await getAuthToken();
   let uploadRes = null;
   try {
     if (window.profile && typeof window.profile.uploadIcon === 'function') {
       uploadRes = await window.profile.uploadIcon(file, token);
     } else {
-      // fallback manual fetch (multipart)
       const form = new FormData(); form.append('file', file);
       const resp = await fetch('/api/user/icon', { method: 'POST', headers: token ? { 'Authorization': `Bearer ${token}` } : {}, body: form });
-      // try to parse JSON but don't fail if server returns empty
       uploadRes = await resp.json().catch(()=>({ success: resp.ok }));
       if (resp.ok) uploadRes.success = true;
     }
@@ -165,43 +183,33 @@ async function handleUpload(ev) {
     console.error('upload error', e);
     uploadRes = { success: false, error: String(e) };
   } finally {
-    // revoke preview after a short delay so browser can render it
     setTimeout(() => { try { URL.revokeObjectURL(previewUrl); } catch (e){} }, 1500);
   }
 
   if (!uploadRes || !uploadRes.success) {
     alert('Ошибка при загрузке: ' + (uploadRes && uploadRes.error ? uploadRes.error : 'unknown'));
     ev.target.value = '';
-    // optionally restore previous avatar by forcing a refresh from main (below)
     return;
   }
 
-  // Успешно загрузили на сервер — теперь:
-  // 1) попросим main скачать свежий blob и обновить кеш (avatar.forceRefresh)
-  // 2) если main вернул dataUrl — сразу установим его; иначе — попытаемся отдельно получить dataUrl и установить
   const userId = window.currentUser && window.currentUser.id;
   try {
     if (window.avatar && typeof window.avatar.forceRefresh === 'function' && userId) {
       const fr = await window.avatar.forceRefresh(userId, token);
       if (fr && fr.ok && fr.dataUrl) {
         setLocalAvatarSrc(fr.dataUrl);
-      } else if (fr && fr.notFound) {
-        setLocalAvatarSrc(DEFAULT_AVATAR);
       } else {
-        // if forceRefresh failed - try fetching via preload helper
         const fetched = await fetchAvatarDataUrl(userId, token);
         if (fetched && fetched.success && fetched.dataUrl) setLocalAvatarSrc(fetched.dataUrl);
         else setLocalAvatarSrc(DEFAULT_AVATAR);
       }
     } else {
-      // no avatar API in preload: try to fetch dataUrl directly via preload or public url
       const fetched = await fetchAvatarDataUrl(userId, token);
       if (fetched && fetched.success && fetched.dataUrl) setLocalAvatarSrc(fetched.dataUrl);
       else setLocalAvatarSrc(DEFAULT_AVATAR);
     }
   } catch (e) {
     console.warn('After upload: refresh/cache update failed', e);
-    // Last fallback: force cache-busting URL
     const imgEl = document.getElementById(PROFILE_IMG_ID);
     if (imgEl && imgEl.src) imgEl.src = imgEl.src.split('?')[0] + '?t=' + Date.now();
   } finally {
@@ -210,11 +218,9 @@ async function handleUpload(ev) {
   }
 }
 
-// -------------------- delete handler: удаляем на сервер и сбрасываем кеш в main --------------------
 async function handleRemove() {
   if (!confirm('Удалить фотографию профиля?')) return;
   const token = await getAuthToken();
-  // delete via preload helper
   let delRes = null;
   try {
     if (window.profile && typeof window.profile.deleteIcon === 'function') {
@@ -234,7 +240,6 @@ async function handleRemove() {
     return;
   }
 
-  // tell main to clear cache and broadcast deletion
   const userId = window.currentUser && window.currentUser.id;
   try {
     if (userId && window.avatar && typeof window.avatar.clear === 'function') {
@@ -250,77 +255,25 @@ async function handleRemove() {
 
 // -------------------- Initialization and wiring --------------------
 
-async function initAvatarInitialLoad() {
-  const img = document.getElementById(PROFILE_IMG_ID);
-  if (!img) return;
-  const userId = window.currentUser && window.currentUser.id;
-  if (!userId) {
-    // If no currentUser: try to recover once via token
-    const token = await getAuthToken();
-    if (token && window.auth && typeof window.auth.getUser === 'function') {
-      try {
-        const ru = await window.auth.getUser(token);
-        if (ru && ru.success && ru.user) {
-          window.currentUser = ru.user;
-        }
-      } catch (e) { /* ignore */ }
-    }
-  }
+async function initSettingsView() {
+  const colorInput = $('themeColor');
+  const saveBtn = $('saveThemeBtn');
+  const stored = localStorage.getItem('app-theme-color') || getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim() || '#3b82f6';
+  if (colorInput) colorInput.value = stored;
+  await applyTheme(stored);
+  if (saveBtn) saveBtn.addEventListener('click', async () => {
+    const color = colorInput.value;
+    await saveTheme(color);
+    alert('Тема сохранена.');
+  });
 
-  const finalUserId = window.currentUser && window.currentUser.id;
-  const token = await getAuthToken();
+  const changeBtn = $('changePasswordBtn');
+  if (changeBtn) changeBtn.addEventListener('click', handleChangePassword);
 
-  // Try to load using main's avatar cache if available
-  if (finalUserId && window.avatar && typeof window.avatar.get === 'function') {
-    try {
-      const av = await window.avatar.get(finalUserId);
-      if (av && av.ok && av.dataUrl) {
-        setLocalAvatarSrc(av.dataUrl);
-        return;
-      } else if (av && av.notFound) {
-        setLocalAvatarSrc(DEFAULT_AVATAR);
-        return;
-      } else if (av && av.dataUrl) {
-        // sometimes returns non-ok but has dataUrl (use it)
-        setLocalAvatarSrc(av.dataUrl);
-        return;
-      }
-    } catch (e) {
-      console.warn('avatar.get failed', e);
-    }
-  }
-
-  // fallback: fetch via preload helper or public url
-  const fetched = await fetchAvatarDataUrl(finalUserId, token);
-  if (fetched && fetched.success && fetched.dataUrl) {
-    setLocalAvatarSrc(fetched.dataUrl);
-  } else {
-    setLocalAvatarSrc(DEFAULT_AVATAR);
-  }
+  const deleteBtn = $('deleteAccountBtn');
+  if (deleteBtn) deleteBtn.addEventListener('click', handleDeleteAccount);
 }
 
-// Subscribe to broadcasts (main-вызовы при обновлении кеша)
-function subscribeAvatarBroadcasts() {
-  if (window.avatar && typeof window.avatar.onChanged === 'function') {
-    // callback(payload) where payload: { userId, dataUrl, deleted }
-    window.avatar.onChanged((payload) => {
-      try {
-        const curUserId = window.currentUser && window.currentUser.id;
-        if (!payload) return;
-        if (payload.userId && curUserId && String(payload.userId) !== String(curUserId)) return; // different user
-        if (payload.dataUrl) {
-          setLocalAvatarSrc(payload.dataUrl);
-        } else if (payload.deleted) {
-          setLocalAvatarSrc(DEFAULT_AVATAR);
-        }
-      } catch (e) { console.error('avatar.onChanged handler error', e); }
-    });
-  } else {
-    // if avatar.onChanged not available, nothing to subscribe to
-  }
-}
-
-// Wire upload/remove/exit UI
 function wireControls() {
   if (uploadPhoto) uploadPhoto.addEventListener('change', handleUpload);
   if (removePhotoBtn) removePhotoBtn.addEventListener('click', handleRemove);
@@ -340,7 +293,68 @@ function wireControls() {
   }
 }
 
-// -------------------- Run init --------------------
+async function initAvatarInitialLoad() {
+  const img = document.getElementById(PROFILE_IMG_ID);
+  if (!img) return;
+  const userId = window.currentUser && window.currentUser.id;
+  if (!userId) {
+    const token = await getAuthToken();
+    if (token && window.auth && typeof window.auth.getUser === 'function') {
+      try {
+        const ru = await window.auth.getUser(token);
+        if (ru && ru.success && ru.user) {
+          window.currentUser = ru.user;
+        }
+      } catch (e) { /* ignore */ }
+    }
+  }
+
+  const finalUserId = window.currentUser && window.currentUser.id;
+  const token = await getAuthToken();
+
+  if (finalUserId && window.avatar && typeof window.avatar.get === 'function') {
+    try {
+      const av = await window.avatar.get(finalUserId);
+      if (av && av.ok && av.dataUrl) {
+        setLocalAvatarSrc(av.dataUrl);
+        return;
+      } else if (av && av.notFound) {
+        setLocalAvatarSrc(DEFAULT_AVATAR);
+        return;
+      } else if (av && av.dataUrl) {
+        setLocalAvatarSrc(av.dataUrl);
+        return;
+      }
+    } catch (e) {
+      console.warn('avatar.get failed', e);
+    }
+  }
+
+  const fetched = await fetchAvatarDataUrl(finalUserId, token);
+  if (fetched && fetched.success && fetched.dataUrl) {
+    setLocalAvatarSrc(fetched.dataUrl);
+  } else {
+    setLocalAvatarSrc(DEFAULT_AVATAR);
+  }
+}
+
+function subscribeAvatarBroadcasts() {
+  if (window.avatar && typeof window.avatar.onChanged === 'function') {
+    window.avatar.onChanged((payload) => {
+      try {
+        const curUserId = window.currentUser && window.currentUser.id;
+        if (!payload) return;
+        if (payload.userId && curUserId && String(payload.userId) !== String(curUserId)) return;
+        if (payload.dataUrl) {
+          setLocalAvatarSrc(payload.dataUrl);
+        } else if (payload.deleted) {
+          setLocalAvatarSrc(DEFAULT_AVATAR);
+        }
+      } catch (e) { console.error('avatar.onChanged handler error', e); }
+    });
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   initSettingsView().catch(e => console.error('initSettingsView error', e));
   wireControls();
