@@ -10,6 +10,18 @@ const BASE_DIR = __dirname;
 let MAIN_JSON_PATH = path.join(__dirname, '..', 'locales', 'main.json');
 const LOCALES_DIR = path.join(__dirname, '..', 'locales');
 
+try {
+  const simPath = path.join(__dirname, 'scripts', 'renderer', 'views', 'simulator', 'main.js');
+  if (fs.existsSync(simPath)) {
+    require(simPath);
+    console.log('Simulator IPC handlers loaded from', simPath);
+  } else {
+    console.warn('Simulator IPC handlers not found at', simPath);
+  }
+} catch (err) {
+  console.error('Failed to load simulator IPC handlers', err);
+}
+
 // --- Safety flag to avoid sending messages while quitting ---
 let isAppQuitting = false;
 app.on('before-quit', () => { isAppQuitting = true; });

@@ -11,7 +11,7 @@
   gap: var(--row-gap) var(--col-gap);
   position: absolute;
   transform: translate(-50%, -50%);
-  padding-top: 5%;
+  padding-top: 6.5%;
   transform: scale(0.75);
 }
 
