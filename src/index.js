@@ -10,9 +10,6 @@ const BASE_DIR = __dirname;
 let MAIN_JSON_PATH = path.join(__dirname, '..', 'locales', 'main.json');
 const LOCALES_DIR = path.join(__dirname, '..', 'locales');
 
-let currentLocale = 'en';
-let cachedLocales = Object.create(null);
-
 // --- Safety flag to avoid sending messages while quitting ---
 let isAppQuitting = false;
 app.on('before-quit', () => { isAppQuitting = true; });
@@ -93,42 +90,6 @@ const SessionStore = {
     await this._saveAvatarMeta();
   }
 };
-
-// --- i18n helpers (preserve behavior) ---
-async function readJsonSafe(filePath) {
-  try { const text = await fsPromises.readFile(filePath, 'utf8'); return JSON.parse(text); } catch (err) { return null; }
-}
-async function loadLocaleData(lang) {
-  const key = String(lang || '').toLowerCase();
-  if (cachedLocales[key]) return cachedLocales[key];
-  const base = (await readJsonSafe(MAIN_JSON_PATH)) || {};
-  const fileCandidate = path.join(LOCALES_DIR, `${key}.json`);
-  const specific = (await readJsonSafe(fileCandidate)) || {};
-  const merged = Object.assign({}, base, specific);
-  cachedLocales[key] = merged;
-  return merged;
-}
-
-// --- Register i18n handlers early (use safeBroadcast for updates) ---
-ipcMain.handle('available-locales', async () => {
-  try {
-    const names = (await fsPromises.readdir(LOCALES_DIR)).filter(f => /\.json$/i.test(f));
-    const out = names.map(n => n.replace(/\.json$/i, '')).filter(n => n !== 'main');
-    return { ok: true, locales: out };
-  } catch (err) { return { ok: false, error: String(err), locales: [] }; }
-});
-ipcMain.handle('load-locale', async (event, lang) => {
-  try { const data = await loadLocaleData(lang || currentLocale); return { ok: true, locale: lang || currentLocale, data }; } catch (err) { return { ok: false, error: String(err), data: {} }; }
-});
-ipcMain.handle('set-current-locale', async (event, lang) => {
-  try {
-    if (!lang || typeof lang !== 'string') throw new Error('Invalid lang');
-    currentLocale = String(lang);
-    const data = await loadLocaleData(currentLocale);
-    safeBroadcast('i18n:update', { locale: currentLocale, data });
-    return { ok: true, locale: currentLocale, data };
-  } catch (err) { return { ok: false, error: String(err) }; }
-});
 
 // --- Session IPC: register both handle and on to avoid "No handler registered" races ---
 // session:set
@@ -300,9 +261,7 @@ const createWindow = () => {
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   mainWindow.on('ready-to-show', async () => {
     try {
-      const data = await loadLocaleData(currentLocale);
       mainWindow.show();
-      safeSendToWebContents(mainWindow.webContents, 'i18n:update', { locale: currentLocale, data });
     } catch (e) { console.error(e); }
   });
   mainWindow.on('closed', () => { mainWindow = null; });
@@ -416,4 +375,29 @@ ipcMain.handle('load-main-json', async () => {
     console.error('Failed to access main.json:', err);
     return { ok: false, error: String(err), data: {} };
   }
+});
+
+app.whenReady().then(() => {
+  // Регистрация обработчиков (обязательно в main)
+  ipcMain.handle('create-session', async (event, opts) => {
+    // TODO: реальная логика создания сессии
+    return { ok: true, token: `session-${Date.now()}` };
+  });
+
+  ipcMain.handle('generate-passage', async (event, opts) => {
+    return { ok: true, text: 'Тестовый текст для набора.' , source: 'local' };
+  });
+
+  ipcMain.handle('record-keystroke', async (event, data) => {
+    return { ok: true };
+  });
+
+  ipcMain.handle('save-passage', async (event, data) => { return { ok: true }; });
+  ipcMain.handle('finalize-results', async (event, data) => { return { ok: true }; });
+
+  createWindow();
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  });
 });

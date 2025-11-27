@@ -307,8 +307,7 @@
             chart.yAxis(1).stroke && chart.yAxis(1).stroke(theme.axisStroke);
           }
 
-          chart.xAxis && chart.xAxis().title && chart.xAxis().title("Секунды").title().fontColor && chart.xAxis().title().fontColor(theme.titles);
-          chart.xAxis && chart.xAxis().labels && chart.xAxis().labels().fontColor && chart.xAxis().labels().fontColor(theme.labels);
+          chart.xAxis && chart.xAxis().title && chart.xAxis().title("Секунды").title().fontColor && chart.xAxis().title().fontColor(theme.titles);          chart.xAxis && chart.xAxis().labels && chart.xAxis().labels().fontColor && chart.xAxis().labels().fontColor(theme.labels);
           chart.xAxis && chart.xAxis().stroke && chart.xAxis().stroke(theme.axisStroke);
         } catch (e) { /* ignore */ }
 
