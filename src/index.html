@@ -30,11 +30,11 @@
         </div> -->
 
         <ul class="nav-list">
-            <li data-ripple>
+            <!-- <li data-ripple>
                 <i class='bx bx-search'></i>
                 <input type="text" placeholder="" data-i18n-placeholder="search.placeholder">
                 <span class="tooltip" data-i18n="tooltip.search">Поиск</span>
-            </li>
+            </li> -->
             <li data-ripple>
                 <a id="home" href="./scripts/renderer/views/home/home.html" draggable="false" ondragstart="return false">
                     <i class='bx bxs-home'></i>
@@ -42,20 +42,20 @@
                 </a>
                 <span class="tooltip" data-i18n="nav.home">Главная</span>
             </li>
-            <li data-ripple>
+            <!-- <li data-ripple>
                 <a id="game" href="#" draggable="false" ondragstart="return false">
                     <i class='bx bxs-grid-alt'></i>
                     <span class="links_name" data-i18n="nav.play">Играть</span>
                 </a>
                 <span class="tooltip" data-i18n="nav.play">Играть</span>
-            </li>
-            <li data-ripple>
+            </li> -->
+            <!-- <li data-ripple>
                 <a id="messages" href="#" draggable="false" ondragstart="return false">
                     <i class='bx bxs-chat'></i>
                     <span class="links_name" data-i18n="nav.messages">Сообщения</span>
                 </a>
                 <span class="tooltip" data-i18n="nav.messages">Сообщения</span>
-            </li>
+            </li> -->
             <li data-ripple>
                 <a id="training" href="./scripts/renderer/views/simulator/simulator.html" draggable="false" ondragstart="return false">
                     <i class='bx bxs-pie-chart-alt-2'></i>
@@ -63,13 +63,13 @@
                 </a>
                 <span class="tooltip" data-i18n="nav.training">Тренажер</span>
             </li>
-            <li data-ripple>
+            <!-- <li data-ripple>
                 <a id="news" href="#" draggable="false" ondragstart="return false">
                     <i class='bx bxs-folder'></i>
                     <span class="links_name" data-i18n="nav.news">Новости</span>
                 </a>
                 <span class="tooltip" data-i18n="nav.news">Новости</span>
-            </li>
+            </li> -->
             <li data-ripple>
                 <a id="settings" href="./scripts/renderer/views/settings/settings.html" draggable="false" ondragstart="return false">
                     <i class='bx bxs-cog'></i>
@@ -84,7 +84,6 @@
                         <div id="username" class="username" data-i18n="profile.username">@username</div>
                     </div>
                 </div>
-                <i id="log_out" class='bx bx-log-out-circle' title="Logout"></i>
             </li>
         </ul>
     </aside>
@@ -101,9 +100,6 @@
     <script src="./attribute_ripple/attribute-ripple.js"></script>
     <script src="scripts/aside-bar/aside-bar.js"></script>
     <script src="renderer.js"></script>
-
-    <!-- i18n host helper: применяет переводы к DOM и взаимодействует с API из preload -->
-    <!-- <script>
       (function () {
         // вспомогательные функции
         function resolveKey(obj, path) {
