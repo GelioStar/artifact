@@ -1,6 +1,3 @@
-// PRO_v1.3/src/scripts/renderer/views/simulator/main.js
-// IPC handlers for the "simulator" webview — рабочая, самодостаточная реализация.
-
 const { ipcMain } = require('electron');
 const path = require('node:path');
 const fs = require('fs');
@@ -12,10 +9,12 @@ const DB_DIR = path.join(BASE_DIR, 'data');
 if (!fs.existsSync(DB_DIR)) fs.mkdirSync(DB_DIR, { recursive: true });
 const DB_PATH = path.join(DB_DIR, 'typing.db');
 
-// открываем БД (файл будет создан, если его нет)
+// Открываем (или создаём) файл базы данных SQLite
 const db = new sqlite3.Database(DB_PATH);
 
-// Асинхронные helper'ы для sqlite
+// Асинхронные обёртки для sqlite
+// Небольшие promisified-версия методов run/all/get для удобства в async/await.
+
 function runAsync(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.run(sql, params, function (err) {
@@ -41,7 +40,18 @@ function getAsync(sql, params = []) {
   });
 }
 
-// Создать минимальные необходимые таблицы (safe при повторном запуске)
+// Схема БД и её инициализация
+/**
+ * ensureSchema
+ * Создаёт минимальные таблицы, необходимые для работы симулятора.
+ * Алгоритм idempotent — безопасен при повторном запуске (IF NOT EXISTS).
+ * Таблицы:
+ *  - sessions: информация о сессии (токен, язык, длительность и т.п.)
+ *  - passages: тексты для набора, привязанные к сессии
+ *  - settings: настройки сессии (t9, морфология, стиль)
+ *  - keystrokes: события нажатий клавиш (телеметрия)
+ *  - results: итоговые результаты (wpm, accuracy и т.д.)
+ */
 async function ensureSchema() {
   await runAsync(`CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
@@ -95,9 +105,17 @@ async function ensureSchema() {
     FOREIGN KEY(session_token) REFERENCES sessions(token) ON DELETE CASCADE
   );`);
 }
-ensureSchema().catch(console.error);
 
-// Простейший генератор текста (можно заменить алгоритмом)
+ensureSchema().catch(err => {
+  console.error('Ошибка при инициализации схемы БД:', err);
+});
+
+// Генератор случайного текста
+/**
+ * randomWords
+ * Простейший генератор текста — возвращает строку из n случайных слов
+ * (используется как заглушка; может быть заменён более сложным алгоритмом).
+ */
 function randomWords(n = 30) {
   const words = ("lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua").split(' ');
   const out = [];
@@ -105,8 +123,12 @@ function randomWords(n = 30) {
   return out.join(' ');
 }
 
-// IPC handlers
-
+// IPC-обработчики 
+/**
+ * create-session
+ * Генерирует новый токен сессии, создаёт запись в таблице sessions и базовые настройки в settings.
+ * opts может содержать параметры: language, duration, punctuation, user_id, t9_enabled, morph_enabled, style.
+ */
 ipcMain.handle('create-session', async (event, opts = {}) => {
   try {
     const token = crypto.randomBytes(12).toString('hex');
@@ -120,76 +142,108 @@ ipcMain.handle('create-session', async (event, opts = {}) => {
       style = 'plain'
     } = opts || {};
 
+    // Вставляем запись о сессии и связанные параметры
     await runAsync(`INSERT INTO sessions(token, user_id, language, duration, punctuation) VALUES(?,?,?,?,?)`, [token, user_id, language, duration, punctuation]);
     await runAsync(`INSERT INTO settings(session_token, t9_enabled, morph_enabled, style) VALUES(?,?,?,?)`, [token, t9_enabled, morph_enabled, style]);
 
     return { ok: true, token, language, duration, punctuation };
   } catch (err) {
-    console.error('create-session error', err);
-    return { ok: false, error: String(err) };
+    // Логируем ошибку на русском и возвращаем понятный пользователю ответ на русском
+    console.error('Ошибка при создании сессии:', err);
+    return { ok: false, error: 'Не удалось создать сессию', detail: String(err) };
   }
 });
 
+/**
+ * save-passage
+ * Сохраняет текст (passage) в таблицу passages, привязанную к session_token.
+ * Возвращает id созданной записи.
+ */
 ipcMain.handle('save-passage', async (event, data = {}) => {
   try {
     const { session_token, text, language = 'en', punctuation = 0, source = 'random' } = data || {};
     const res = await runAsync(`INSERT INTO passages(session_token, text, language, punctuation, source) VALUES(?,?,?,?,?)`, [session_token, text, language, punctuation, source]);
     return { ok: true, id: res.lastID };
   } catch (err) {
-    console.error('save-passage error', err);
-    return { ok: false, error: String(err) };
+    console.error('Ошибка при сохранении passage:', err);
+    return { ok: false, error: 'Не удалось сохранить текст задания', detail: String(err) };
   }
 });
 
+/**
+ * record-keystroke
+ * Фиксация одного события нажатия клавиши в таблице keystrokes.
+ * Ожидаемые поля: session_token, t_ms (время в мс), key (строка), position (позиция в тексте), correct (0/1).
+ */
 ipcMain.handle('record-keystroke', async (event, data = {}) => {
   try {
     const { session_token, t_ms = 0, key = '', position = 0, correct = 0 } = data || {};
     await runAsync(`INSERT INTO keystrokes(session_token, t_ms, key, position, correct) VALUES(?,?,?,?,?)`, [session_token, t_ms, key, position, correct ? 1 : 0]);
     return { ok: true };
   } catch (err) {
-    console.error('record-keystroke error', err);
-    return { ok: false, error: String(err) };
+    console.error('Ошибка при записи keystroke:', err);
+    return { ok: false, error: 'Не удалось сохранить нажатие клавиши', detail: String(err) };
   }
 });
 
+/**
+ * finalize-results
+ * Сохраняет итоговые результаты сессии в таблицу results.
+ * Ожидаемые поля: session_token, wpm, accuracy, total_chars, errors.
+ */
 ipcMain.handle('finalize-results', async (event, data = {}) => {
   try {
     const { session_token, wpm = 0, accuracy = 0, total_chars = 0, errors = 0 } = data || {};
     const res = await runAsync(`INSERT INTO results(session_token, wpm, accuracy, total_chars, errors) VALUES(?,?,?,?,?)`, [session_token, wpm, accuracy, total_chars, errors]);
     return { ok: true, id: res.lastID };
   } catch (err) {
-    console.error('finalize-results error', err);
-    return { ok: false, error: String(err) };
+    console.error('Ошибка при сохранении результатов:', err);
+    return { ok: false, error: 'Не удалось сохранить результаты', detail: String(err) };
   }
 });
 
+/**
+ * get-keystrokes
+ * Возвращает все события keystrokes для заданной сессии (упорядоченные по id).
+ * Полезно для воспроизведения сессии или отладки.
+ */
 ipcMain.handle('get-keystrokes', async (event, session_token) => {
   try {
     const rows = await allAsync(`SELECT * FROM keystrokes WHERE session_token = ? ORDER BY id ASC`, [session_token]);
     return { ok: true, rows };
   } catch (err) {
-    console.error('get-keystrokes error', err);
-    return { ok: false, error: String(err) };
+    console.error('Ошибка при получении keystrokes:', err);
+    return { ok: false, error: 'Не удалось получить данные о нажатиях клавиш', detail: String(err) };
   }
 });
 
+/**
+ * generate-passage
+ * Генерирует новый текст-задание (passage) на клиент без обращения к внешним источникам.
+ * opts.length_words — количество слов в сгенерированном тексте.
+ */
 ipcMain.handle('generate-passage', async (event, opts = {}) => {
   try {
     const words = Number(opts.length_words) || 30;
     const text = randomWords(words);
     return { ok: true, text, source: 'random' };
   } catch (err) {
-    console.error('generate-passage error', err);
-    return { ok: false, error: String(err) };
+    console.error('Ошибка при генерации текста:', err);
+    return { ok: false, error: 'Не удалось сгенерировать текст', detail: String(err) };
   }
 });
 
+/**
+ * get-results
+ * Возвращает последние результаты из таблицы results (по убыванию created_at).
+ * limit — максимальное число возвращаемых записей.
+ */
 ipcMain.handle('get-results', async (event, limit = 20) => {
   try {
     const rows = await allAsync(`SELECT * FROM results ORDER BY created_at DESC LIMIT ?`, [limit]);
     return { ok: true, rows };
   } catch (err) {
-    console.error('get-results error', err);
-    return { ok: false, error: String(err) };
+    console.error('Ошибка при получении результатов:', err);
+    return { ok: false, error: 'Не удалось получить результаты', detail: String(err) };
   }
 });

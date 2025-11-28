@@ -268,7 +268,7 @@ const createWindow = () => {
       contextIsolation: true, nodeIntegration: false, webviewTag: true,
     },
     icon: path.join(__dirname, 'img', 'logo.png'),
-    show: false, autoHideMenuBar: false,
+    show: false, autoHideMenuBar: true,
   });
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   mainWindow.on('ready-to-show', async () => {
