@@ -117,7 +117,7 @@ ensureSchema().catch(err => {
  * (используется как заглушка; может быть заменён более сложным алгоритмом).
  */
 function randomWords(n = 30) {
-  const words = ("lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua").split(' ');
+  const words = ("I and read this in pH from ask why").split(' ');
   const out = [];
   for (let i = 0; i < n; i++) out.push(words[Math.floor(Math.random() * words.length)]);
   return out.join(' ');
