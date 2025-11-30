@@ -132,9 +132,13 @@ window.cycleLocale = async function cycleLocale() {
   }
 };
 
-const webview = document.getElementById('guest');
-webview.addEventListener('dom-ready', () => {
-  webview.openDevTools();
+// const webview = document.getElementById('guest');
+// webview.addEventListener('dom-ready', () => {
+//   webview.openDevTools();
+// });
+
+document.addEventListener('dom-ready', () => {
+  document.openDevTools();
 });
 
 (async function(){

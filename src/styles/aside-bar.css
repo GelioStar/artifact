@@ -213,7 +213,8 @@
     width: 40px;
     object-fit: contain;
     border-radius: 6px;
-    margin-right: 12px;
+    margin-right: 18px;
+    margin-left: 6px;
 }
 
 .sidebar li.profile .username,

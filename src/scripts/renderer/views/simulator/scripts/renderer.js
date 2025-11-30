@@ -1,4 +1,4 @@
-// renderer.js — оптимизированная версия (сохранён весь функционал)
+// renderer.js — оптимизированная версия с интегрированной стенографической эмуляцией
 (() => {
   const $ = (id) => document.getElementById(id);
 
@@ -536,7 +536,346 @@
     if (remaining <= 0) stopSession();
   }
 
-  // --- keyboard handling ---
+  // ------------------------
+  // --- STENOGRAPHIC LAYER ---
+  // Integrated and adapted from keyConsoleLog.js
+  // ------------------------
+  // Settings
+  const S_releaseWindowMs = 5;
+  const S_finalDelayMs = 5;
+  const S_SEQUENCE_WINDOW_MS = 1000;
+
+  const S_QWERTY_ORDER = "QAWSEDRFVBTGNMYHUJIKOLP;";
+
+  const S_qwertyToSteno = {
+    'Q': 'S', 'W': 'T', 'E': 'P', 'R': 'H', 'T': '*', 'Y': 'F', 'U': 'P', 'I': 'L', 'O': 'T', 'P': 'D',
+    'A': 'S', 'S': 'K', 'D': 'W', 'F': 'R', 'G': '*', 'H': 'R', 'J': 'B', 'K': 'G', 'L': 'S', ';': 'Z',
+    'V': 'A', 'B': 'O', 'N': 'E', 'M': 'U'
+  };
+
+  // Build set of blocked keys (keys mentioned in mapping)
+  const S_blockedKeys = new Set(Object.keys(S_qwertyToSteno).map(k => (String(k || '').toUpperCase())));
+
+  // Internal state
+  const S_pressedSet = new Set();
+  let S_pressedSymbols = new Set();
+  let S_releaseBatchSet = new Set();
+  const S_chordSequence = [];
+
+  let S_mainMap = {};
+  let S_releaseTimer = null;
+  let S_finalTimer = null;
+  let S_sequenceTimer = null;
+
+  // small helpers specific to stenotype
+  const S_normalizeKey = (s) => (String(s || '').trim().toUpperCase().slice(0,1) || null);
+
+  function S_idFromElement(el) {
+    if (!el) return null;
+    if (el.dataset && el.dataset.code) return `code:${el.dataset.code}`;
+    if (el.dataset && el.dataset.key) return `key:${S_normalizeKey(el.dataset.key)}`;
+    if (el.dataset && el.dataset.text) return `key:${S_normalizeKey(el.dataset.text)}`;
+    const sym = S_normalizeKey(el.textContent || el.innerText);
+    if (sym) return `key:${sym}`;
+    if (!el.dataset.uid) el.dataset.uid = Math.random().toString(36).slice(2,9);
+    return `el:${el.dataset.uid}`;
+  }
+
+  function S_keyIdFromKeyboardEvent(e) {
+    const code = e.code || null;
+    const key = (e.key && e.key.length === 1) ? S_normalizeKey(e.key) : null;
+    return code ? `code:${code}` : (key ? `key:${key}` : null);
+  }
+
+  function S_getSymbolFromElement(el) {
+    if (!el) return null;
+    if (el.dataset && el.dataset.key) return S_normalizeKey(el.dataset.key);
+    if (el.dataset && el.dataset.text) return S_normalizeKey(el.dataset.text);
+    return S_normalizeKey(el.textContent || el.innerText);
+  }
+
+  function S_sortQwertySymbols(arr) {
+    const orderMap = new Map();
+    for (let i = 0; i < S_QWERTY_ORDER.length; i++) orderMap.set(S_QWERTY_ORDER[i], i);
+    return arr.sort((a,b) => {
+      const ia = orderMap.has(a) ? orderMap.get(a) : Number.POSITIVE_INFINITY;
+      const ib = orderMap.has(b) ? orderMap.get(b) : Number.POSITIVE_INFINITY;
+      if (ia !== ib) return ia - ib;
+      return a.localeCompare(b);
+    });
+  }
+
+  function S_qwertyArrayToStenoString(arr) {
+    return arr.map(ch => S_qwertyToSteno[ch] || ch).join('');
+  }
+
+  // This will insert the produced text into the typing session (simulate key presses)
+  function steno_injectTextToSession(text) {
+    if (!text || typeof text !== 'string') return;
+    // If session not active, ignore injection (keep behavior consistent with main keyboard: focus trainer for Enter)
+    if (!t0) {
+      // optionally, if you want steno to seed trainer when not running, implement here
+      console.warn('Steno input ignored — session not started');
+      return;
+    }
+
+    // Insert characters sequentially as if typed; record keystrokes similarly to normal typing
+    for (let i = 0; i < text.length; i++) {
+      if (cursor >= passageText.length) break;
+      const typed = text[i];
+      const expected = passageText[cursor];
+      const ok = normalizeSpaceChar(typed) === normalizeSpaceChar(expected);
+      const pos = cursor;
+      statuses[pos] = ok ? 'correct' : 'incorrect';
+      const kobj = { t_ms: nowMs() - t0 + i, key: typed, position: pos, correct: ok };
+      keystrokes.push(kobj);
+
+      // immediate recording if enabled (fire-and-forget)
+      if (RECORD_EACH_KEY && api && api.recordKeystroke) {
+        try {
+          api.recordKeystroke({
+            session_token: sessionToken,
+            t_ms: Math.round(kobj.t_ms),
+            key: kobj.key,
+            position: kobj.position,
+            correct: kobj.correct ? 1 : 0
+          }).catch && api.recordKeystroke({
+            session_token: sessionToken,
+            t_ms: Math.round(kobj.t_ms),
+            key: kobj.key,
+            position: kobj.position,
+            correct: kobj.correct ? 1 : 0
+          }).catch(console.error);
+        } catch (err) {
+          console.error('recordKeystroke (steno immediate) failed', err);
+        }
+      }
+
+      cursor++;
+    }
+
+    scheduleRender();
+
+    // update immediate live stats (cheap)
+    const stat = computeStats();
+    showLiveStats(stat);
+  }
+
+  // emit result (called after mapping / matching)
+  function S_emitResult(text) {
+    console.log('STENO EMIT:', text);
+    // If mapping produced a single steno-chord string (like 'STP'), but no mainMap mapping,
+    // we may want to emit it verbatim; here we inject mapping result as literal characters
+    // If mainMap entries are words/phrases, they will be inserted as sequences.
+    steno_injectTextToSession(String(text));
+    // also forward to main process printing if available (keep original behavior)
+    if (window.electronAPI && window.electronAPI.printText) {
+      try { window.electronAPI.printText(String(text)); } catch (e) { /* ignore */ }
+    }
+  }
+
+  function S_tryMatchLongestSequence() {
+    if (!S_mainMap || Object.keys(S_mainMap).length === 0) return false;
+    for (let n = S_chordSequence.length; n >= 1; n--) {
+      const candidate = S_chordSequence.slice(-n).join('/');
+      if (candidate in S_mainMap) {
+        const value = S_mainMap[candidate];
+        S_emitResult(value);
+        S_chordSequence.splice(S_chordSequence.length - n, n);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function S_doLogBatch() {
+    if (S_releaseBatchSet.size === 0) return;
+    const qarr = Array.from(S_releaseBatchSet).map(x => String(x).toUpperCase());
+    const sorted = S_sortQwertySymbols(qarr);
+    const stenoChord = S_qwertyArrayToStenoString(sorted);
+
+    S_releaseBatchSet.clear();
+    S_pressedSymbols.clear();
+
+    S_chordSequence.push(stenoChord);
+
+    if (S_tryMatchLongestSequence()) {
+      if (S_sequenceTimer) { clearTimeout(S_sequenceTimer); S_sequenceTimer = null; }
+      return;
+    }
+
+    if (S_sequenceTimer) clearTimeout(S_sequenceTimer);
+    S_sequenceTimer = setTimeout(() => {
+      S_sequenceTimer = null;
+      if (S_tryMatchLongestSequence()) return;
+      while (S_chordSequence.length > 0) {
+        const single = S_chordSequence.shift();
+        if (single in S_mainMap) {
+          S_emitResult(S_mainMap[single]);
+        } else {
+          S_emitResult(single);
+        }
+      }
+    }, S_SEQUENCE_WINDOW_MS);
+  }
+
+  function S_onReleaseDetected(symbol) {
+    if (symbol) S_releaseBatchSet.add(symbol);
+    if (S_releaseTimer) { clearTimeout(S_releaseTimer); S_releaseTimer = null; }
+    if (S_finalTimer) { clearTimeout(S_finalTimer); S_finalTimer = null; }
+
+    S_releaseTimer = setTimeout(() => {
+      S_releaseTimer = null;
+      if (S_pressedSet.size === 0) {
+        S_finalTimer = setTimeout(() => {
+          S_finalTimer = null;
+          S_doLogBatch();
+        }, S_finalDelayMs);
+      }
+    }, S_releaseWindowMs);
+  }
+
+  // Exposed (internal) handlers used by capture listeners
+  function S_onKeydownFromEvent(e) {
+    const id = S_keyIdFromKeyboardEvent(e);
+    if (!id) return;
+    if (S_pressedSet.has(id)) return;
+    S_pressedSet.add(id);
+    const keyChar = (e.key && e.key.length === 1) ? S_normalizeKey(e.key) : null;
+    if (keyChar) S_pressedSymbols.add(keyChar);
+    if (S_releaseTimer) { clearTimeout(S_releaseTimer); S_releaseTimer = null; }
+    if (S_finalTimer) { clearTimeout(S_finalTimer); S_finalTimer = null; }
+  }
+
+  function S_onKeyupFromEvent(e) {
+    const id = S_keyIdFromKeyboardEvent(e);
+    if (!id) return;
+    S_pressedSet.delete(id);
+    const keyChar = (e.key && e.key.length === 1) ? S_normalizeKey(e.key) : null;
+    if (keyChar) {
+      S_pressedSymbols.add(keyChar);
+      S_onReleaseDetected(keyChar);
+    } else {
+      S_onReleaseDetected(null);
+    }
+  }
+
+  // Mouse/touch handlers for .key-btn — reuse original semantics
+  function S_keyButtons() { return Array.from(document.querySelectorAll('.key-btn')); }
+
+  function S_initMouseTouchForButtons() {
+    S_keyButtons().forEach(btn => {
+      if (!btn.dataset.key && !btn.dataset.text) {
+        const s = S_normalizeKey(btn.textContent || btn.innerText);
+        if (s) btn.dataset.text = s;
+      }
+      let mouseId = null;
+
+      btn.addEventListener('mousedown', (ev) => {
+        ev.preventDefault();
+        const id = S_idFromElement(btn);
+        S_pressedSet.add(id);
+        const sym = S_getSymbolFromElement(btn);
+        if (sym) S_pressedSymbols.add(sym);
+        if (S_releaseTimer) { clearTimeout(S_releaseTimer); S_releaseTimer = null; }
+        if (S_finalTimer) { clearTimeout(S_finalTimer); S_finalTimer = null; }
+        mouseId = id;
+      });
+
+      const releaseMouseHandler = (ev) => {
+        if (!mouseId) return;
+        S_pressedSet.delete(mouseId);
+        const sym = S_getSymbolFromElement(btn);
+        if (sym) S_onReleaseDetected(sym);
+        else S_onReleaseDetected(null);
+        mouseId = null;
+      };
+
+      btn.addEventListener('mouseup', releaseMouseHandler);
+      btn.addEventListener('mouseleave', releaseMouseHandler);
+
+      btn.addEventListener('touchstart', (ev) => {
+        ev.preventDefault();
+        const id = S_idFromElement(btn);
+        S_pressedSet.add(id);
+        const sym = S_getSymbolFromElement(btn);
+        if (sym) S_pressedSymbols.add(sym);
+        if (S_releaseTimer) { clearTimeout(S_releaseTimer); S_releaseTimer = null; }
+        if (S_finalTimer) { clearTimeout(S_finalTimer); S_finalTimer = null; }
+        mouseId = id;
+      }, { passive: false });
+
+      btn.addEventListener('touchend', releaseMouseHandler);
+      btn.addEventListener('touchcancel', releaseMouseHandler);
+    });
+  }
+
+  function S_clearAllStates() {
+    S_pressedSet.clear();
+    S_pressedSymbols.clear();
+    S_releaseBatchSet.clear();
+    S_chordSequence.length = 0;
+    if (S_releaseTimer) { clearTimeout(S_releaseTimer); S_releaseTimer = null; }
+    if (S_finalTimer) { clearTimeout(S_finalTimer); S_finalTimer = null; }
+    if (S_sequenceTimer) { clearTimeout(S_sequenceTimer); S_sequenceTimer = null; }
+  }
+
+  window.addEventListener('blur', S_clearAllStates);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') S_clearAllStates();
+  });
+
+  // load main.json (mapping for steno -> words/phrases)
+  async function S_loadMainJson() {
+    try {
+      if (!window.electronAPI || !window.electronAPI.loadMainJson) {
+        console.warn('electronAPI.loadMainJson is not available in preload. main.json mapping will be empty.');
+        return;
+      }
+      const res = await window.electronAPI.loadMainJson();
+      if (res && res.ok && res.data) {
+        S_mainMap = res.data;
+        console.log('Loaded main.json entries:', Object.keys(S_mainMap).length);
+      } else {
+        console.warn('Failed to load main.json from main process.', res && res.error);
+      }
+    } catch (err) {
+      console.error('Error while loading main.json:', err);
+    }
+  }
+
+  // Capture keyboard events for keys that should be handled by the stenographic layer.
+  // Use capture phase so we can block them from the normal renderer keyboard handler.
+  window.addEventListener('keydown', (e) => {
+    const keyChar = (e.key && e.key.length === 1) ? String(e.key).toUpperCase() : null;
+    if (keyChar && S_blockedKeys.has(keyChar)) {
+      // Intercept and route to steno logic
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      S_onKeydownFromEvent(e);
+    }
+    // else: leave event for normal renderer handling
+  }, true);
+
+  window.addEventListener('keyup', (e) => {
+    const keyChar = (e.key && e.key.length === 1) ? String(e.key).toUpperCase() : null;
+    if (keyChar && S_blockedKeys.has(keyChar)) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      S_onKeyupFromEvent(e);
+    }
+  }, true);
+
+  // Expose a small API so mouse/touch on .key-btn can call the steno mouse handlers if needed.
+  // Initialize mouse/touch after DOM ready.
+  window.addEventListener('DOMContentLoaded', async () => {
+    await S_loadMainJson();
+    S_initMouseTouchForButtons();
+  });
+
+  // ------------------------
+  // --- ORIGINAL KEYBOARD HANDLER (updated to co-exist with steno layer) ---
+  // ------------------------
   window.addEventListener('keydown', (e) => {
     const trainer = resolveNode('trainer');
 
@@ -551,6 +890,16 @@
     const isPrintable = key.length === 1;
     const isNav = key === 'Backspace' || key === 'Tab' || key.startsWith('Arrow') || key === 'Enter';
     if (!isPrintable && !isNav) return;
+
+    // If this printable key is in the blocked set, it should have been intercepted earlier (capture listener).
+    // But be defensive: if it reaches here and is blocked, swallow it.
+    if (isPrintable) {
+      const up = String(key).toUpperCase();
+      if (S_blockedKeys.has(up)) {
+        e.preventDefault();
+        return;
+      }
+    }
 
     e.preventDefault();
 
@@ -614,6 +963,13 @@
     else if (key === 'ArrowRight') { if (cursor < passageText.length) { cursor++; scheduleRender(); } }
   });
 
+  // ------------------------
+  // Finalize steno -> injection glue:
+  // When steno release batch completes, it currently pushes to S_chordSequence and S_doLogBatch
+  // which will call S_emitResult -> steno_injectTextToSession.
+  // That integration is already wired above.
+  // ------------------------
+
   // --- Controls binding ---
   function bindControls() {
     const startBtn = resolveNode('startBtn');
@@ -668,6 +1024,12 @@
     restoreTrainerInCard,
     render,
     computeStats,
-    getState: () => ({ sessionToken, passageText, duration, language, punctuation, cursor, keystrokes, elapsedMs })
+    getState: () => ({ sessionToken, passageText, duration, language, punctuation, cursor, keystrokes, elapsedMs }),
+    // Steno debug helpers
+    _steno: {
+      loadMainJson: S_loadMainJson,
+      clearStates: S_clearAllStates,
+      mainMap: () => S_mainMap
+    }
   };
 })();

@@ -1,7 +1,12 @@
+# Ignore typing database files
 src/scripts/renderer/views/simulator/data/typing.db
 server/app.db
+
+# Ignore build output directories
 versions/
+# Ignore custom scripts directory
 addscripts/
+# Ignore Visual Studio Code workspace files
 artifact.code-workspace
 
 # Logs
